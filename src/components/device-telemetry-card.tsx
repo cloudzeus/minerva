@@ -139,6 +139,14 @@ export function DeviceTelemetryCard({
 
   const chartData = filteredData.length > 0 ? filteredData : allData;
 
+  // Debug logging
+  React.useEffect(() => {
+    console.log(`[${deviceName}] Total telemetry records:`, telemetryData.length);
+    console.log(`[${deviceName}] Chart data points:`, chartData.length);
+    console.log(`[${deviceName}] All properties:`, allProperties);
+    console.log(`[${deviceName}] Sample data:`, chartData.slice(0, 3));
+  }, [deviceName, telemetryData.length, chartData.length, allProperties]);
+
   // Properties to show in chart (exclude battery and other percentage-based values)
   const chartProperties = React.useMemo(() => {
     const excludeFromChart = ["battery", "electricity", "humidity"]; // These use different scales
@@ -347,7 +355,7 @@ export function DeviceTelemetryCard({
                   />
                   <ChartTooltip
                     cursor={false}
-                    content={<ChartTooltipContent indicator="line" />}
+                    content={<ChartTooltipContent indicator="dot" />}
                   />
                   {chartProperties.map((prop, index) => {
                     const chartIndex = (index % 5) + 1;
@@ -355,11 +363,11 @@ export function DeviceTelemetryCard({
                       <Area
                         key={prop}
                         dataKey={prop}
-                        type="natural"
+                        type="monotone"
                         fill={`url(#fill${prop})`}
-                        fillOpacity={0.4}
+                        fillOpacity={1}
                         stroke={`hsl(var(--chart-${chartIndex}))`}
-                        stackId="a"
+                        strokeWidth={2}
                       />
                     );
                   })}
