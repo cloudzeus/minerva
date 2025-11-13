@@ -175,26 +175,26 @@ export function DeviceTelemetryCard({
   }, [allProperties]);
 
   return (
-    <Card className="pt-0">
-      <CardHeader className="flex items-center gap-2 space-y-0 border-b py-3 sm:flex-row">
-        <div className="flex flex-1 items-center gap-2">
-          <div>
-            <CardTitle className="flex items-center gap-2 text-sm uppercase">
-              <FaMicrochip className="h-4 w-4 text-purple-500" />
-              {deviceName || `Device ${deviceId}`}
-            </CardTitle>
+    <Card className="border-border/40 bg-card/50 shadow-sm backdrop-blur-sm">
+      <CardHeader className="flex items-center gap-2 space-y-0 border-b py-5 sm:flex-row">
+        <div className="grid flex-1 gap-1 text-center sm:text-left">
+          <CardTitle className="flex items-center gap-2">
+            <FaMicrochip className="h-4 w-4 text-muted-foreground" />
+            {deviceName || `Device ${deviceId}`}
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            <Badge
+              variant={deviceStatus === "ONLINE" ? "default" : "secondary"}
+              className="h-5"
+            >
+              <FaCircle
+                className={`mr-1 h-2 w-2 ${
+                  deviceStatus === "ONLINE" ? "animate-pulse text-green-400" : "text-gray-400"
+                }`}
+              />
+              {deviceStatus}
+            </Badge>
           </div>
-          <Badge
-            variant={deviceStatus === "ONLINE" ? "default" : "secondary"}
-            className="gap-1 text-xs"
-          >
-            <FaCircle
-              className={`h-2 w-2 ${
-                deviceStatus === "ONLINE" ? "text-green-500" : "text-gray-500"
-              }`}
-            />
-            {deviceStatus}
-          </Badge>
         </div>
         <div className="flex items-center gap-2">
           <ExportTelemetryButton
@@ -204,22 +204,22 @@ export function DeviceTelemetryCard({
           />
           <Select value={timeRange} onValueChange={setTimeRange}>
             <SelectTrigger
-              className="w-[120px] rounded-lg text-xs"
-              aria-label="Select time range"
+              className="w-[160px] rounded-lg sm:ml-auto"
+              aria-label="Select a value"
             >
-              <SelectValue placeholder="Last 24h" />
+              <SelectValue placeholder="Last 24 hours" />
             </SelectTrigger>
             <SelectContent className="rounded-xl">
-              <SelectItem value="1h" className="rounded-lg text-xs">
+              <SelectItem value="1h" className="rounded-lg">
                 Last 1 hour
               </SelectItem>
-              <SelectItem value="6h" className="rounded-lg text-xs">
+              <SelectItem value="6h" className="rounded-lg">
                 Last 6 hours
               </SelectItem>
-              <SelectItem value="24h" className="rounded-lg text-xs">
+              <SelectItem value="24h" className="rounded-lg">
                 Last 24 hours
               </SelectItem>
-              <SelectItem value="7d" className="rounded-lg text-xs">
+              <SelectItem value="7d" className="rounded-lg">
                 Last 7 days
               </SelectItem>
             </SelectContent>
@@ -227,16 +227,18 @@ export function DeviceTelemetryCard({
         </div>
       </CardHeader>
 
-      <CardContent className="space-y-4 px-2 pt-4 sm:px-4 sm:pt-4">
+      <CardContent className="px-2 pb-4 pt-0 sm:px-6 sm:pb-6">
         {allProperties.length === 0 ? (
           /* No Data Available */
-          <div className="flex h-[250px] items-center justify-center rounded-lg border bg-muted/30">
+          <div className="flex h-[300px] items-center justify-center rounded-xl border-2 border-dashed border-border/50 bg-muted/20">
             <div className="text-center">
-              <FaMicrochip className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
-              <p className="text-xs font-semibold text-muted-foreground">
+              <div className="bg-muted mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full">
+                <FaMicrochip className="h-6 w-6 text-muted-foreground" />
+              </div>
+              <p className="text-sm font-medium text-foreground">
                 No telemetry data yet
               </p>
-              <p className="text-xs text-muted-foreground">
+              <p className="mt-1 text-xs text-muted-foreground">
                 Waiting for webhook events...
               </p>
             </div>
@@ -244,7 +246,7 @@ export function DeviceTelemetryCard({
         ) : (
           <>
             {/* Current Sensor Readings - Top 2 Properties */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="mb-4 grid grid-cols-2 gap-3">
               {displayProperties.map((prop) => {
                 const value = latestValues[prop];
                 const config = propertyIcons[prop] || {
@@ -257,18 +259,18 @@ export function DeviceTelemetryCard({
                 return (
                   <div
                     key={prop}
-                    className="flex items-center gap-2 rounded-lg border bg-muted/50 p-2"
+                    className="flex flex-col rounded-lg border border-border/40 bg-muted/50 p-3"
                   >
-                    <Icon className={`h-4 w-4 ${config.color}`} />
-                    <div>
-                      <div className="text-xs text-muted-foreground uppercase">
-                        {prop.replace(/_/g, " ")}
-                      </div>
-                      <div className="text-base font-bold">
-                        {value !== null && value !== undefined
-                          ? `${typeof value === "number" ? value.toFixed(1) : value}${config.unit || ""}`
-                          : "—"}
-                      </div>
+                    <div className="flex items-center gap-2">
+                      <Icon className={`h-4 w-4 ${config.color}`} />
+                      <span className="text-xs font-medium text-muted-foreground">
+                        {prop.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
+                      </span>
+                    </div>
+                    <div className="mt-2 text-2xl font-bold">
+                      {value !== null && value !== undefined
+                        ? `${typeof value === "number" ? value.toFixed(1) : value}${config.unit || ""}`
+                        : "—"}
                     </div>
                   </div>
                 );
@@ -279,7 +281,7 @@ export function DeviceTelemetryCard({
             {chartData.length > 0 ? (
               <ChartContainer
                 config={dynamicChartConfig}
-                className="aspect-auto h-[200px] w-full"
+                className="aspect-auto h-[250px] w-full"
               >
                 <AreaChart data={chartData}>
                   <defs>
@@ -352,29 +354,37 @@ export function DeviceTelemetryCard({
                 </AreaChart>
               </ChartContainer>
             ) : (
-              <div className="flex h-[200px] items-center justify-center text-xs text-muted-foreground">
-                No data available
+              <div className="flex h-[250px] items-center justify-center rounded-xl border-2 border-dashed border-border/50 bg-muted/20">
+                <div className="text-center">
+                  <FaChartLine className="mx-auto mb-2 h-6 w-6 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">No chart data available</p>
+                </div>
               </div>
             )}
 
             {/* All Properties List */}
             {allProperties.length > 2 && (
-              <details className="text-xs">
-                <summary className="cursor-pointer font-semibold text-muted-foreground hover:text-foreground">
-                  All Properties ({allProperties.length})
+              <details className="group mt-4 rounded-lg border border-border/40 bg-muted/20 p-4">
+                <summary className="cursor-pointer text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
+                  <span className="inline-flex items-center gap-2">
+                    All Sensor Properties
+                    <Badge variant="secondary" className="ml-1 h-5">
+                      {allProperties.length}
+                    </Badge>
+                  </span>
                 </summary>
-                <div className="mt-2 grid grid-cols-2 gap-2">
+                <div className="mt-4 grid grid-cols-2 gap-2">
                   {allProperties.map((prop) => {
                     const value = latestValues[prop];
                     const config = propertyIcons[prop] || { icon: FaChartLine, color: "text-gray-500" };
                     const Icon = config.icon;
                     
                     return (
-                      <div key={prop} className="flex items-center justify-between rounded border bg-muted/30 p-2">
-                        <div className="flex items-center gap-1">
-                          <Icon className={`h-3 w-3 ${config.color}`} />
+                      <div key={prop} className="flex items-center justify-between rounded-lg border border-border/40 bg-background p-2.5">
+                        <div className="flex items-center gap-2">
+                          <Icon className={`h-3.5 w-3.5 ${config.color}`} />
                           <span className="text-xs text-muted-foreground">
-                            {prop.replace(/_/g, " ")}
+                            {prop.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
                           </span>
                         </div>
                         <span className="text-xs font-mono font-semibold">

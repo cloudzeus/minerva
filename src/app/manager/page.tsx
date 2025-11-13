@@ -104,11 +104,11 @@ export default async function ManagerDashboard() {
 
   return (
     <DashboardLayout requiredRole={Role.MANAGER}>
-      <div className="space-y-4">
+      <div className="flex flex-1 flex-col gap-4 p-4 md:gap-6 md:p-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold uppercase">MANAGER DASHBOARD</h1>
-            <p className="text-xs text-muted-foreground">
+            <h1 className="text-3xl font-bold tracking-tight">Manager Dashboard</h1>
+            <p className="text-muted-foreground mt-2 text-sm">
               Monitor team performance, devices, and activities
             </p>
           </div>
@@ -116,7 +116,7 @@ export default async function ManagerDashboard() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid gap-4 md:grid-cols-3">
+        <div className="grid auto-rows-min gap-4 md:grid-cols-3">
           <StatsCard
             title="TEAM MEMBERS"
             value={stats.employeeCount}
@@ -151,7 +151,7 @@ export default async function ManagerDashboard() {
 
         {/* Device Telemetry Cards - Individual per Device */}
         {stats.devices.length > 0 && (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid auto-rows-min gap-4 md:grid-cols-2 lg:grid-cols-3">
             {stats.devices.map((device) => {
               const deviceTelemetry = stats.telemetryByDevice.get(device.deviceId) || [];
               return (
@@ -170,12 +170,12 @@ export default async function ManagerDashboard() {
         )}
 
         {/* Team Performance Charts */}
-        <div className="grid gap-4 md:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-sm uppercase">
-                <FaChartLine className="h-4 w-4 text-blue-500" />
-                TEAM PERFORMANCE
+        <div className="grid auto-rows-min gap-4 md:grid-cols-2">
+          <Card className="border-border/40 bg-card/50 shadow-sm backdrop-blur-sm">
+            <CardHeader className="border-b pb-4">
+              <CardTitle className="flex items-center gap-2">
+                <FaChartLine className="h-4 w-4 text-blue-600" />
+                Team Performance
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -183,11 +183,11 @@ export default async function ManagerDashboard() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-sm uppercase">
-                <FaUsers className="h-4 w-4 text-green-500" />
-                TEAM OVERVIEW
+          <Card className="border-border/40 bg-card/50 shadow-sm backdrop-blur-sm">
+            <CardHeader className="border-b pb-4">
+              <CardTitle className="flex items-center gap-2">
+                <FaUsers className="h-4 w-4 text-green-600" />
+                Team Overview
               </CardTitle>
             </CardHeader>
             <CardContent className="flex items-center justify-center">
@@ -204,11 +204,11 @@ export default async function ManagerDashboard() {
         </div>
 
         {/* Recent Employee Activity */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm uppercase">TEAM RECENT ACTIVITY</CardTitle>
+        <Card className="border-border/40 bg-card/50 shadow-sm backdrop-blur-sm">
+          <CardHeader className="border-b pb-4">
+            <CardTitle>Team Recent Activity</CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="pt-4">
             <RecentActivityTable activities={stats.recentActivity} />
           </CardContent>
         </Card>

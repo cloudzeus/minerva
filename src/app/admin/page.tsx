@@ -96,11 +96,11 @@ export default async function AdminDashboard() {
 
   return (
     <DashboardLayout requiredRole={Role.ADMIN}>
-      <div className="space-y-4">
+      <div className="flex flex-1 flex-col gap-4 p-4 md:gap-6 md:p-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold uppercase">ADMIN DASHBOARD</h1>
-            <p className="text-xs text-muted-foreground">
+            <h1 className="text-3xl font-bold tracking-tight">Admin Dashboard</h1>
+            <p className="text-muted-foreground mt-2 text-sm">
               Manage users, devices, and monitor system activity
             </p>
           </div>
@@ -108,7 +108,7 @@ export default async function AdminDashboard() {
         </div>
 
         {/* User Stats Cards */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <div className="grid auto-rows-min gap-4 md:grid-cols-4">
           <StatsCard
             title="TOTAL USERS"
             value={stats.totalUsers}
@@ -150,7 +150,7 @@ export default async function AdminDashboard() {
 
         {/* Device Telemetry Cards - Individual per Device */}
         {stats.devices.length > 0 && (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid auto-rows-min gap-4 md:grid-cols-2 lg:grid-cols-3">
             {stats.devices.map((device) => {
               const deviceTelemetry = stats.telemetryByDevice.get(device.deviceId) || [];
               return (
