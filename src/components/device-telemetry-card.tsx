@@ -144,9 +144,10 @@ export function DeviceTelemetryCard({
   const dynamicChartConfig: ChartConfig = React.useMemo(() => {
     const config: ChartConfig = {};
     allProperties.forEach((prop, index) => {
+      const chartIndex = (index % 5) + 1;
       config[prop] = {
         label: prop.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-        color: chartColors[index % chartColors.length],
+        color: `hsl(var(--chart-${chartIndex}))`,
       };
     });
     return config;
