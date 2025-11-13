@@ -7,6 +7,7 @@ import { FaUsers, FaCrown, FaUserTie, FaUser } from "react-icons/fa";
 import { RealtimeStatsCards } from "@/components/realtime-stats-cards";
 import { RealtimeDeviceCard } from "@/components/realtime-device-card";
 import { ExportTelemetryButton } from "@/components/export-telemetry-button";
+import { getCurrentUser } from "@/lib/auth-helpers";
 
 async function getDashboardStats() {
   const [
@@ -93,6 +94,7 @@ async function getDashboardStats() {
 
 export default async function AdminDashboard() {
   const stats = await getDashboardStats();
+  const user = await getCurrentUser();
 
   return (
     <DashboardLayout requiredRole={Role.ADMIN}>
@@ -162,6 +164,7 @@ export default async function AdminDashboard() {
                   deviceType={device.deviceType || undefined}
                   deviceModel={device.deviceType || undefined}
                   initialTelemetryData={deviceTelemetry}
+                  userRole={user?.role}
                 />
               );
             })}

@@ -99,6 +99,7 @@ async function getEmployeeStats(userId: string) {
 export default async function EmployeeDashboard() {
   const currentUser = await getCurrentUser();
   const stats = await getEmployeeStats(currentUser!.id);
+  const user = currentUser;
 
   return (
     <DashboardLayout requiredRole={Role.EMPLOYEE}>
@@ -161,6 +162,7 @@ export default async function EmployeeDashboard() {
                   deviceType={device.deviceType || undefined}
                   deviceModel={device.deviceType || undefined}
                   initialTelemetryData={deviceTelemetry}
+                  userRole={user?.role}
                 />
               );
             })}

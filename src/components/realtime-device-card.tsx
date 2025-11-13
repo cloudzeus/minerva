@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useRealtimeEvent } from "@/lib/realtime-context";
 import { DeviceTelemetryCard } from "@/components/device-telemetry-card";
-import { MilesightDeviceTelemetry } from "@prisma/client";
+import { MilesightDeviceTelemetry, Role } from "@prisma/client";
 
 interface RealtimeDeviceCardProps {
   deviceId: string;
@@ -12,6 +12,7 @@ interface RealtimeDeviceCardProps {
   deviceType?: string;
   deviceModel?: string;
   initialTelemetryData: MilesightDeviceTelemetry[];
+  userRole?: Role;
 }
 
 export function RealtimeDeviceCard({
@@ -21,6 +22,7 @@ export function RealtimeDeviceCard({
   deviceType,
   deviceModel,
   initialTelemetryData,
+  userRole,
 }: RealtimeDeviceCardProps) {
   const [telemetryData, setTelemetryData] = useState(initialTelemetryData);
   const [deviceStatus, setDeviceStatus] = useState(initialStatus);
@@ -78,6 +80,7 @@ export function RealtimeDeviceCard({
       deviceType={deviceType}
       deviceModel={deviceModel}
       telemetryData={telemetryData}
+      userRole={userRole}
     />
   );
 }

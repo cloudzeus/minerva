@@ -16,7 +16,14 @@ export async function GET(
       take: limit,
     });
 
-    return NextResponse.json(telemetryData);
+    // Convert BigInt to string for JSON serialization
+    const serializedData = telemetryData.map((record) => ({
+      ...record,
+      id: record.id.toString(),
+      dataTimestamp: record.dataTimestamp.toString(),
+    }));
+
+    return NextResponse.json(serializedData);
   } catch (error) {
     console.error("[API] Failed to fetch telemetry:", error);
     return NextResponse.json(

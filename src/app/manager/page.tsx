@@ -9,6 +9,7 @@ import { RecentActivityTable } from "@/components/recent-activity-table";
 import { RealtimeStatsCards } from "@/components/realtime-stats-cards";
 import { RealtimeDeviceCard } from "@/components/realtime-device-card";
 import { ExportTelemetryButton } from "@/components/export-telemetry-button";
+import { getCurrentUser } from "@/lib/auth-helpers";
 
 async function getManagerStats() {
   const [
@@ -101,6 +102,7 @@ async function getManagerStats() {
 
 export default async function ManagerDashboard() {
   const stats = await getManagerStats();
+  const user = await getCurrentUser();
 
   return (
     <DashboardLayout requiredRole={Role.MANAGER}>
@@ -163,6 +165,7 @@ export default async function ManagerDashboard() {
                   deviceType={device.deviceType || undefined}
                   deviceModel={device.deviceType || undefined}
                   initialTelemetryData={deviceTelemetry}
+                  userRole={user?.role}
                 />
               );
             })}

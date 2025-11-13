@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { MilesightDeviceTelemetry } from "@prisma/client";
+import { MilesightDeviceTelemetry, Role } from "@prisma/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -41,6 +41,7 @@ interface DeviceTelemetryCardProps {
   deviceType?: string;
   deviceModel?: string;
   telemetryData: MilesightDeviceTelemetry[];
+  userRole?: Role;
 }
 
 // Icon mapping for common sensor properties
@@ -68,8 +69,12 @@ export function DeviceTelemetryCard({
   deviceType,
   deviceModel,
   telemetryData,
+  userRole,
 }: DeviceTelemetryCardProps) {
   const [timeRange, setTimeRange] = React.useState("all");
+  
+  // Only admins and managers can export
+  const canExport = userRole === Role.ADMIN || userRole === Role.MANAGER;
 
   // Get latest reading - safely handle empty array
   const latestReading = telemetryData.length > 0 ? telemetryData[0] : null;
@@ -203,11 +208,13 @@ export function DeviceTelemetryCard({
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <ExportTelemetryButton
-            deviceId={deviceId}
-            variant="outline"
-            size="sm"
-          />
+          {canExport && (
+            <ExportTelemetryButton
+              deviceId={deviceId}
+              variant="outline"
+              size="sm"
+            />
+          )}
           <Select value={timeRange} onValueChange={setTimeRange}>
             <SelectTrigger
               className="w-[140px] text-xs rounded-lg sm:ml-auto"
