@@ -335,20 +335,14 @@ export function DeviceTelemetryCard({
                     }}
                   />
                   <ChartTooltip
-                    cursor={false}
                     content={
                       <ChartTooltipContent
-                        indicator="dashed"
-                        labelFormatter={(value) => {
-                          try {
-                            const timestamp = Number(value);
-                            if (!timestamp || isNaN(timestamp)) return "Invalid date";
-                            const date = new Date(timestamp);
-                            if (isNaN(date.getTime())) return "Invalid date";
-                            return format(date, "PPpp");
-                          } catch (error) {
-                            return "Invalid date";
-                          }
+                        className="w-[200px]"
+                        labelFormatter={(value, payload) => {
+                          if (!payload || !payload[0]) return "";
+                          const dataPoint = payload[0].payload;
+                          if (!dataPoint || !dataPoint.date) return "";
+                          return format(dataPoint.date, "MMM dd, yyyy HH:mm");
                         }}
                       />
                     }
@@ -397,8 +391,8 @@ export function DeviceTelemetryCard({
                           </span>
                         </div>
                         <span className="text-xs font-mono font-semibold">
-                          {value !== null && value !== undefined
-                            ? `${typeof value === "number" ? value.toFixed(1) : value}${config.unit || ""}`
+                          {value !== null && value !== undefined && value !== ""
+                            ? `${typeof value === "number" ? (Number.isInteger(value) ? value : value.toFixed(1)) : value}${config.unit || ""}`
                             : "—"}
                         </span>
                       </div>
