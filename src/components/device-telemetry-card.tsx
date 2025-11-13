@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Bar, BarChart, CartesianGrid, XAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import {
   ChartConfig,
   ChartContainer,
@@ -312,8 +312,26 @@ export function DeviceTelemetryCard({
                     axisLine={false}
                     minTickGap={60}
                     tickFormatter={(value) => {
-                      const date = new Date(Number(value));
-                      return format(date, "HH:mm");
+                      try {
+                        const timestamp = Number(value);
+                        if (!timestamp || isNaN(timestamp)) return "";
+                        const date = new Date(timestamp);
+                        if (isNaN(date.getTime())) return "";
+                        return format(date, "HH:mm");
+                      } catch (error) {
+                        return "";
+                      }
+                    }}
+                  />
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                    label={{
+                      value: "Temperature (°C)",
+                      angle: -90,
+                      position: "insideLeft",
+                      style: { fontSize: "0.75rem" },
                     }}
                   />
                   <ChartTooltip
@@ -322,8 +340,15 @@ export function DeviceTelemetryCard({
                       <ChartTooltipContent
                         indicator="dashed"
                         labelFormatter={(value) => {
-                          const date = new Date(Number(value));
-                          return format(date, "PPpp");
+                          try {
+                            const timestamp = Number(value);
+                            if (!timestamp || isNaN(timestamp)) return "Invalid date";
+                            const date = new Date(timestamp);
+                            if (isNaN(date.getTime())) return "Invalid date";
+                            return format(date, "PPpp");
+                          } catch (error) {
+                            return "Invalid date";
+                          }
                         }}
                       />
                     }
