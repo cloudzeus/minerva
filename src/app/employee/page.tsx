@@ -10,6 +10,7 @@ import { RecentActivityTable } from "@/components/recent-activity-table";
 import { RealtimeStatsCards } from "@/components/realtime-stats-cards";
 import { RealtimeDeviceCard } from "@/components/realtime-device-card";
 import { ExportTelemetryButton } from "@/components/export-telemetry-button";
+import { AutoRefresh } from "@/components/auto-refresh";
 
 async function getEmployeeStats(userId: string) {
   const [
