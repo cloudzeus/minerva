@@ -79,23 +79,27 @@ export function DeviceTelemetryCard({
   // Get latest reading - safely handle empty array
   const latestReading = telemetryData.length > 0 ? telemetryData[0] : null;
   
-  // Detect all available properties dynamically
+  // Detect all available properties dynamically - FILTER OUT garbage
   const allProperties = React.useMemo(() => {
     const props = new Set<string>();
+    const GARBAGE_PROPS = ["mutation", "temperature"]; // Generic "temperature" without _left/_right is garbage
+    
     telemetryData.forEach((d) => {
       if (d.sensorData) {
         const sensorData = JSON.parse(d.sensorData);
         Object.keys(sensorData).forEach((key) => {
           const value = sensorData[key];
-          // Only include numeric values for charting
-          if (typeof value === "number") {
+          const keyLower = key.toLowerCase();
+          
+          // Only include numeric values AND exclude garbage properties
+          if (typeof value === "number" && !GARBAGE_PROPS.includes(keyLower)) {
             props.add(key);
           }
         });
       }
     });
     const propsArray = Array.from(props);
-    console.log(`[${deviceName}] All detected properties:`, propsArray);
+    console.log(`[${deviceName}] Valid properties (garbage filtered):`, propsArray);
     return propsArray;
   }, [telemetryData, deviceName]);
 
@@ -162,14 +166,14 @@ export function DeviceTelemetryCard({
     },
   } satisfies ChartConfig;
 
-  // Get the top 2 most important properties to display in sensor readings - temperature sensors only
+  // Get the top 2 most important properties to display in sensor readings
   const displayProperties = React.useMemo(() => {
-    // Only show actual temperature sensors, not battery
-    const tempProps = allProperties.filter(prop => 
-      prop.toLowerCase().includes("temperature") && 
-      (prop === "temperature_left" || prop === "temperature_right")
-    );
-    return tempProps.slice(0, 2);
+    // Priority: temperature_left, temperature_right
+    const priority = ["temperature_left", "temperature_right"];
+    const sorted = allProperties
+      .filter(prop => priority.includes(prop))
+      .sort((a, b) => priority.indexOf(a) - priority.indexOf(b));
+    return sorted.slice(0, 2);
   }, [allProperties]);
 
   return (
@@ -280,7 +284,7 @@ export function DeviceTelemetryCard({
               })}
             </div>
 
-            {/* Shadcn Interactive Area Chart */}
+            {/* Temperature Trend Chart */}
             {chartData.length > 0 && (hasTemperatureLeft || hasTemperatureRight) ? (
               <ChartContainer
                 config={chartConfig}
@@ -306,10 +310,7 @@ export function DeviceTelemetryCard({
                       return format(date, "HH:mm");
                     }}
                   />
-                  <ChartTooltip
-                    cursor={false}
-                    content={<ChartTooltipContent indicator="dot" />}
-                  />
+                  <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
                   {hasTemperatureLeft && (
                     <Area
                       dataKey="temperature_left"
@@ -317,7 +318,6 @@ export function DeviceTelemetryCard({
                       fill="var(--color-temperature_left)"
                       fillOpacity={0.4}
                       stroke="var(--color-temperature_left)"
-                      stackId="a"
                     />
                   )}
                   {hasTemperatureRight && (
@@ -327,7 +327,6 @@ export function DeviceTelemetryCard({
                       fill="var(--color-temperature_right)"
                       fillOpacity={0.4}
                       stroke="var(--color-temperature_right)"
-                      stackId="a"
                     />
                   )}
                   <ChartLegend content={<ChartLegendContent />} />
