@@ -8,11 +8,10 @@ import {
   CardContent,
   CardDescription,
   CardHeader,
-  CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { FaEnvelope, FaLock, FaShieldAlt } from "react-icons/fa";
+import { FaEnvelope, FaLock } from "react-icons/fa";
 import { toast } from "sonner";
 import { handleLogin } from "@/app/actions/auth";
 
@@ -51,10 +50,13 @@ export function LoginForm() {
   return (
     <Card className="w-full max-w-md shadow-2xl">
       <CardHeader className="space-y-1 text-center">
-        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-primary">
-          <FaShieldAlt className="h-7 w-7 text-primary-foreground" />
+        <div className="mx-auto mb-4">
+          <img 
+            src="https://wwa-espa.b-cdn.net/crm/minervaLogo.png" 
+            alt="MINERVA" 
+            className="h-[68px] w-auto mx-auto"
+          />
         </div>
-        <CardTitle className="text-xl font-bold uppercase">MINERVA</CardTitle>
         <CardDescription className="text-xs">
           Enter your credentials to access the system
         </CardDescription>
@@ -95,6 +97,16 @@ export function LoginForm() {
             {isLoading ? "SIGNING IN..." : "SIGN IN"}
           </Button>
         </form>
+        
+        {/* Powered By Section */}
+        <div className="mt-6 flex flex-col items-center gap-2 border-t pt-4">
+          <p className="text-[9px] text-muted-foreground">Powered by</p>
+          <img 
+            src="https://kimoncrm.b-cdn.net/company/logo/1759767599592-ecy9f9.svg" 
+            alt="AIC" 
+            className="h-[48px] w-auto"
+          />
+        </div>
       </CardContent>
     </Card>
   );

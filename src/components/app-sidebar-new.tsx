@@ -246,8 +246,11 @@ export function AppSidebarNew({ role, currentPath }: AppSidebarProps) {
       <div className="border-b p-4">
         <div className="flex items-center justify-between">
           <div className={cn("overflow-hidden transition-all", isOpen ? "w-full" : "w-0")}>
-            <h1 className="text-lg font-bold text-primary">MINERVA</h1>
-            <p className="text-xs text-muted-foreground">RBAC System</p>
+            <img 
+              src="https://wwa-espa.b-cdn.net/crm/minervaLogo.png" 
+              alt="MINERVA" 
+              className="h-[68px] w-auto"
+            />
           </div>
           <Button
             variant="ghost"
