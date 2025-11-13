@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useState } from "react";
 import { useRealtimeEvent } from "@/lib/realtime-context";
 import { DeviceTelemetryCard } from "@/components/device-telemetry-card";
 import { MilesightDeviceTelemetry, Role } from "@prisma/client";
@@ -24,35 +24,20 @@ export function RealtimeDeviceCard({
   initialTelemetryData,
   userRole,
 }: RealtimeDeviceCardProps) {
-  const [telemetryData, setTelemetryData] = useState(initialTelemetryData);
   const [deviceStatus, setDeviceStatus] = useState(initialStatus);
-  const updateTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
+  const [latestValues, setLatestValues] = useState<Record<string, number>>({});
 
-  // Debounced fetch function - only fetch after 2 seconds of no new events
-  const fetchLatestData = useCallback(async () => {
-    try {
-      const response = await fetch(`/api/devices/${deviceId}/telemetry?limit=2000`);
-      if (response.ok) {
-        const data = await response.json();
-        setTelemetryData(data);
-      }
-    } catch (error) {
-      console.error("[RealtimeDeviceCard] Failed to fetch telemetry:", error);
-    }
-  }, [deviceId]);
-
-  // Listen for new telemetry events with debouncing
+  // Listen for new telemetry events - ONLY update current values, NOT chart data
   useRealtimeEvent("new_telemetry", (data) => {
     if (data?.deviceId === deviceId) {
-      // Clear existing timeout
-      if (updateTimeoutRef.current) {
-        clearTimeout(updateTimeoutRef.current);
-      }
+      // Update ONLY the current sensor values, not the chart
+      const newValues: Record<string, number> = {};
       
-      // Set new timeout - only update after 2 seconds of silence
-      updateTimeoutRef.current = setTimeout(() => {
-        fetchLatestData();
-      }, 2000);
+      if (data.data?.temperature) newValues.temperature = data.data.temperature;
+      if (data.data?.humidity) newValues.humidity = data.data.humidity;
+      if (data.data?.battery) newValues.battery = data.data.battery;
+      
+      setLatestValues(prev => ({ ...prev, ...newValues }));
     }
   });
 
@@ -63,15 +48,6 @@ export function RealtimeDeviceCard({
     }
   });
 
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (updateTimeoutRef.current) {
-        clearTimeout(updateTimeoutRef.current);
-      }
-    };
-  }, []);
-
   return (
     <DeviceTelemetryCard
       deviceId={deviceId}
@@ -79,8 +55,9 @@ export function RealtimeDeviceCard({
       deviceStatus={deviceStatus}
       deviceType={deviceType}
       deviceModel={deviceModel}
-      telemetryData={telemetryData}
+      telemetryData={initialTelemetryData}
       userRole={userRole}
+      realtimeLatestValues={latestValues}
     />
   );
 }
