@@ -315,7 +315,15 @@ export function DeviceTelemetryCard({
                     tickMargin={8}
                     minTickGap={32}
                     tickFormatter={(value) => {
-                      return format(new Date(value), "HH:mm");
+                      try {
+                        const timestamp = Number(value);
+                        if (!timestamp || isNaN(timestamp)) return "";
+                        const date = new Date(timestamp);
+                        if (isNaN(date.getTime())) return "";
+                        return format(date, "HH:mm");
+                      } catch (error) {
+                        return "";
+                      }
                     }}
                     style={{ fontSize: "0.65rem" }}
                   />
@@ -329,7 +337,20 @@ export function DeviceTelemetryCard({
                     content={
                       <ChartTooltipContent
                         labelFormatter={(value) => {
-                          return format(new Date(value as number), "PPpp");
+                          try {
+                            const timestamp = Number(value);
+                            if (!timestamp || isNaN(timestamp)) {
+                              return "Invalid date";
+                            }
+                            const date = new Date(timestamp);
+                            if (isNaN(date.getTime())) {
+                              return "Invalid date";
+                            }
+                            return format(date, "PPpp");
+                          } catch (error) {
+                            console.error("Date format error:", error);
+                            return "Invalid date";
+                          }
                         }}
                         indicator="dot"
                         formatter={(value, name) => {
