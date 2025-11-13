@@ -65,24 +65,44 @@ export async function saveMilesightSettings(formData: FormData) {
     console.log("[Milesight Settings] Skip Token Request:", skipTokenRequest);
     console.log("=".repeat(80));
 
+    // Check if settings exist FIRST (needed for token request)
+    console.log("\n💾 [Milesight] Checking for existing settings...");
+    const existingSettings = await prisma.milesightSettings.findFirst();
+    console.log("[Milesight] Existing settings:", existingSettings ? "Found" : "Not found");
+
     // First, test the credentials by requesting a token
     let accessToken: string | null = null;
     let refreshToken: string | null = null;
     let accessTokenExpiresAt: Date | null = null;
     let refreshTokenExpiresAt: Date | null = null;
 
-    if (enabled && clientSecret !== "••••••••" && !skipTokenRequest) {
-      // Only request token if enabled, secret was changed, and not skipping
+    // Determine if we should request a new token
+    const shouldRequestToken = enabled && !skipTokenRequest;
+    
+    console.log("[Milesight] Should request token?", shouldRequestToken);
+    console.log("  - enabled:", enabled);
+    console.log("  - skipTokenRequest:", skipTokenRequest);
+    console.log("  - clientSecret is masked:", clientSecret === "••••••••");
+
+    if (shouldRequestToken) {
+      // Get the real client secret (not masked)
+      const realClientSecret = clientSecret === "••••••••" && existingSettings
+        ? existingSettings.clientSecret
+        : clientSecret;
+
+      console.log("[Milesight] Using", clientSecret === "••••••••" ? "existing" : "new", "client secret");
+
+      // Request token if enabled and not skipping
       try {
         console.log("\n🔑 [Milesight] Requesting access token...");
         console.log("[Milesight] Token endpoint:", `${baseUrl}/uc/account/api/oauth/token`);
         console.log("[Milesight] Client ID:", clientId);
-        console.log("[Milesight] Client Secret length:", clientSecret?.length || 0);
+        console.log("[Milesight] Client Secret length:", realClientSecret?.length || 0);
         
         const tokenResponse = await requestMilesightToken({
           baseUrl,
           clientId,
-          clientSecret,
+          clientSecret: realClientSecret,
         });
 
         console.log("[Milesight] Token response received:", {
@@ -131,10 +151,7 @@ export async function saveMilesightSettings(formData: FormData) {
       console.log("  - Skip Token Request:", skipTokenRequest);
     }
 
-    // Check if settings exist
-    console.log("\n💾 [Milesight] Saving to database...");
-    const existingSettings = await prisma.milesightSettings.findFirst();
-    console.log("[Milesight] Existing settings:", existingSettings ? "Found" : "Not found");
+    console.log("\n💾 [Milesight] Preparing to save to database...");
 
     const settingsData = {
       name,
