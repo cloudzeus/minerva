@@ -11,16 +11,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Area, AreaChart, CartesianGrid, XAxis } from "recharts";
 import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from "recharts";
+  ChartConfig,
+  ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart";
 import { format } from "date-fns";
 import {
   FaThermometerHalf,
@@ -149,15 +148,21 @@ export function DeviceTelemetryCard({
 
   const chartData = filteredData.length > 0 ? filteredData : allData;
 
-  // Properties to show in chart - ONLY actual temperature sensors
-  const chartProperties = React.useMemo(() => {
-    // Only include these specific temperature properties
-    const allowedProps = ["temperature_left", "temperature_right"];
-    return allProperties.filter(prop => allowedProps.includes(prop.toLowerCase()));
-  }, [allProperties]);
+  // Only show temperature_left and temperature_right in chart
+  const hasTemperatureLeft = allProperties.includes("temperature_left");
+  const hasTemperatureRight = allProperties.includes("temperature_right");
 
-  // Color mapping for chart lines
-  const chartColors = ["#3b82f6", "#ef4444", "#10b981", "#f59e0b", "#8b5cf6"];
+  // Chart configuration for shadcn
+  const chartConfig = {
+    temperature_left: {
+      label: "Temperature Left",
+      color: "hsl(var(--chart-1))",
+    },
+    temperature_right: {
+      label: "Temperature Right", 
+      color: "hsl(var(--chart-2))",
+    },
+  } satisfies ChartConfig;
 
   // Get the top 2 most important properties to display in sensor readings - temperature sensors only
   const displayProperties = React.useMemo(() => {
@@ -277,71 +282,59 @@ export function DeviceTelemetryCard({
               })}
             </div>
 
-            {/* Temperature Line Chart - Working Implementation */}
-            {chartData.length > 0 && chartProperties.length > 0 ? (
-              <div className="mt-4">
-                <ResponsiveContainer width="100%" height={280}>
-                  <LineChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-                    <XAxis
-                      dataKey="timestamp"
-                      tickFormatter={(value) => {
-                        try {
-                          const timestamp = Number(value);
-                          if (!timestamp || isNaN(timestamp)) return "";
-                          const date = new Date(timestamp);
-                          if (isNaN(date.getTime())) return "";
-                          return format(date, "HH:mm");
-                        } catch (error) {
-                          return "";
-                        }
-                      }}
-                      style={{ fontSize: "0.75rem" }}
+            {/* Shadcn Interactive Area Chart */}
+            {chartData.length > 0 && (hasTemperatureLeft || hasTemperatureRight) ? (
+              <ChartContainer
+                config={chartConfig}
+                className="aspect-auto h-[250px] w-full"
+              >
+                <AreaChart
+                  accessibilityLayer
+                  data={chartData}
+                  margin={{
+                    left: 12,
+                    right: 12,
+                  }}
+                >
+                  <CartesianGrid vertical={false} />
+                  <XAxis
+                    dataKey="timestamp"
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                    minTickGap={32}
+                    tickFormatter={(value) => {
+                      const date = new Date(Number(value));
+                      return format(date, "HH:mm");
+                    }}
+                  />
+                  <ChartTooltip
+                    cursor={false}
+                    content={<ChartTooltipContent indicator="dot" />}
+                  />
+                  {hasTemperatureLeft && (
+                    <Area
+                      dataKey="temperature_left"
+                      type="natural"
+                      fill="var(--color-temperature_left)"
+                      fillOpacity={0.4}
+                      stroke="var(--color-temperature_left)"
+                      stackId="a"
                     />
-                    <YAxis
-                      label={{
-                        value: "Temperature (°C)",
-                        angle: -90,
-                        position: "insideLeft",
-                        style: { fontSize: "0.75rem" },
-                      }}
-                      style={{ fontSize: "0.75rem" }}
+                  )}
+                  {hasTemperatureRight && (
+                    <Area
+                      dataKey="temperature_right"
+                      type="natural"
+                      fill="var(--color-temperature_right)"
+                      fillOpacity={0.4}
+                      stroke="var(--color-temperature_right)"
+                      stackId="a"
                     />
-                    <Tooltip
-                      labelFormatter={(value) => {
-                        try {
-                          const timestamp = Number(value);
-                          if (!timestamp || isNaN(timestamp)) return "Invalid date";
-                          const date = new Date(timestamp);
-                          if (isNaN(date.getTime())) return "Invalid date";
-                          return format(date, "PPpp");
-                        } catch (error) {
-                          return "Invalid date";
-                        }
-                      }}
-                      formatter={(value: number, name: string) => {
-                        const prop = name as string;
-                        const unit = propertyIcons[prop]?.unit || "";
-                        return [`${value.toFixed(1)}${unit}`, prop.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())];
-                      }}
-                      contentStyle={{ fontSize: "0.75rem" }}
-                    />
-                    <Legend wrapperStyle={{ fontSize: "0.75rem" }} />
-                    {chartProperties.map((prop, index) => (
-                      <Line
-                        key={prop}
-                        type="monotone"
-                        dataKey={prop}
-                        stroke={chartColors[index % chartColors.length]}
-                        strokeWidth={2}
-                        dot={{ fill: chartColors[index % chartColors.length], r: 3 }}
-                        activeDot={{ r: 5 }}
-                        name={prop.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
-                      />
-                    ))}
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
+                  )}
+                  <ChartLegend content={<ChartLegendContent />} />
+                </AreaChart>
+              </ChartContainer>
             ) : (
               <div className="flex h-[250px] items-center justify-center rounded-xl border-2 border-dashed border-border/50 bg-muted/20">
                 <div className="text-center">
