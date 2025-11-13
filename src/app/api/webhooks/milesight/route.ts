@@ -72,21 +72,19 @@ export async function POST(request: NextRequest) {
 
     for (const payload of payloads) {
       try {
-        // Extract from Milesight webhook structure
-        const deviceId = payload.deviceId?.toString();
-        const webhookEvent = payload.webhookPushEvent;
+        // Milesight sends events directly (not wrapped in webhookPushEvent)
+        const eventType = payload.eventType || "unknown";
+        const eventId = payload.eventId;
+        const eventData = payload.data;
 
-        if (!webhookEvent) {
-          console.warn("[Milesight Webhook] No webhookPushEvent in payload:", payload);
+        if (!eventData) {
+          console.warn("[Milesight Webhook] No data in payload:", payload);
           continue;
         }
 
-        const eventType = webhookEvent.eventType || "unknown";
-        const eventId = webhookEvent.eventId;
-        const eventData = webhookEvent.data;
-
-        // Extract device profile
-        const deviceProfile = eventData?.deviceProfile;
+        // Extract device profile from data
+        const deviceProfile = eventData.deviceProfile;
+        const deviceId = deviceProfile?.deviceId?.toString();
         const deviceName = deviceProfile?.name;
         const deviceSn = deviceProfile?.sn;
         const deviceModel = deviceProfile?.model;
@@ -121,8 +119,8 @@ export async function POST(request: NextRequest) {
               deviceId,
               eventId: eventId || `evt-${Date.now()}`,
               eventType,
-              eventVersion: webhookEvent.eventVersion,
-              dataTimestamp: BigInt(eventData.ts || webhookEvent.eventCreatedTime * 1000),
+              eventVersion: payload.eventVersion,
+              dataTimestamp: BigInt(eventData.ts || payload.eventCreatedTime * 1000),
               dataType: eventData.type || "PROPERTY",
               payload: JSON.stringify(dataPayload),
               deviceSn,
