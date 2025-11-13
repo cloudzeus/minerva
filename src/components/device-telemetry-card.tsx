@@ -139,14 +139,6 @@ export function DeviceTelemetryCard({
 
   const chartData = filteredData.length > 0 ? filteredData : allData;
 
-  // Debug logging
-  React.useEffect(() => {
-    console.log(`[${deviceName}] Total telemetry records:`, telemetryData.length);
-    console.log(`[${deviceName}] Chart data points:`, chartData.length);
-    console.log(`[${deviceName}] All properties:`, allProperties);
-    console.log(`[${deviceName}] Sample data:`, chartData.slice(0, 3));
-  }, [deviceName, telemetryData.length, chartData.length, allProperties]);
-
   // Properties to show in chart (exclude battery and other percentage-based values)
   const chartProperties = React.useMemo(() => {
     const excludeFromChart = ["battery", "electricity", "humidity"]; // These use different scales
