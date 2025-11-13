@@ -11,7 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Area, AreaChart, CartesianGrid, XAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, XAxis } from "recharts";
 import {
   ChartConfig,
   ChartContainer,
@@ -71,7 +71,7 @@ export function DeviceTelemetryCard({
   telemetryData,
   userRole,
 }: DeviceTelemetryCardProps) {
-  const [timeRange, setTimeRange] = React.useState("all");
+  const [timeRange, setTimeRange] = React.useState("1h");
   
   // Only admins and managers can export
   const canExport = userRole === Role.ADMIN || userRole === Role.MANAGER;
@@ -148,7 +148,23 @@ export function DeviceTelemetryCard({
         return now - item.timestamp <= timeRanges[timeRange];
       });
 
-  const chartData = filteredData.length > 0 ? filteredData : allData;
+  // Sample data to show one bar every 10 minutes (reduce bar density)
+  const chartData = React.useMemo(() => {
+    if (filteredData.length === 0) return allData;
+    
+    const sampled = [];
+    const tenMinutes = 10 * 60 * 1000;
+    let lastTimestamp = 0;
+    
+    filteredData.forEach((item) => {
+      if (item.timestamp - lastTimestamp >= tenMinutes || sampled.length === 0) {
+        sampled.push(item);
+        lastTimestamp = item.timestamp;
+      }
+    });
+    
+    return sampled;
+  }, [filteredData, allData]);
 
   // Only show temperature_left and temperature_right in chart
   const hasTemperatureLeft = allProperties.includes("temperature_left");
@@ -214,20 +230,20 @@ export function DeviceTelemetryCard({
               <SelectValue placeholder="All Time" />
             </SelectTrigger>
             <SelectContent className="rounded-xl">
-              <SelectItem value="all" className="rounded-lg text-xs">
-                All Time
-              </SelectItem>
               <SelectItem value="1h" className="rounded-lg text-xs">
-                1h
+                Last 1 Hour
               </SelectItem>
               <SelectItem value="6h" className="rounded-lg text-xs">
-                6h
+                Last 6 Hours
               </SelectItem>
               <SelectItem value="24h" className="rounded-lg text-xs">
-                24h
+                Last 24 Hours
               </SelectItem>
               <SelectItem value="7d" className="rounded-lg text-xs">
-                7d
+                Last 7 Days
+              </SelectItem>
+              <SelectItem value="all" className="rounded-lg text-xs">
+                All Time
               </SelectItem>
             </SelectContent>
           </Select>
@@ -284,53 +300,42 @@ export function DeviceTelemetryCard({
               })}
             </div>
 
-            {/* Temperature Trend Chart */}
+            {/* Temperature Bar Chart - Multiple */}
             {chartData.length > 0 && (hasTemperatureLeft || hasTemperatureRight) ? (
-              <ChartContainer
-                config={chartConfig}
-                className="aspect-auto h-[250px] w-full"
-              >
-                <AreaChart
-                  accessibilityLayer
-                  data={chartData}
-                  margin={{
-                    left: 12,
-                    right: 12,
-                  }}
-                >
+              <ChartContainer config={chartConfig}>
+                <BarChart accessibilityLayer data={chartData}>
                   <CartesianGrid vertical={false} />
                   <XAxis
                     dataKey="timestamp"
                     tickLine={false}
+                    tickMargin={10}
                     axisLine={false}
-                    tickMargin={8}
-                    minTickGap={32}
+                    minTickGap={60}
                     tickFormatter={(value) => {
                       const date = new Date(Number(value));
                       return format(date, "HH:mm");
                     }}
                   />
-                  <ChartTooltip cursor={false} content={<ChartTooltipContent />} />
+                  <ChartTooltip
+                    cursor={false}
+                    content={
+                      <ChartTooltipContent
+                        indicator="dashed"
+                        labelFormatter={(value) => {
+                          const date = new Date(Number(value));
+                          return format(date, "PPpp");
+                        }}
+                      />
+                    }
+                  />
                   {hasTemperatureLeft && (
-                    <Area
-                      dataKey="temperature_left"
-                      type="natural"
-                      fill="var(--color-temperature_left)"
-                      fillOpacity={0.4}
-                      stroke="var(--color-temperature_left)"
-                    />
+                    <Bar dataKey="temperature_left" fill="var(--color-temperature_left)" radius={4} />
                   )}
                   {hasTemperatureRight && (
-                    <Area
-                      dataKey="temperature_right"
-                      type="natural"
-                      fill="var(--color-temperature_right)"
-                      fillOpacity={0.4}
-                      stroke="var(--color-temperature_right)"
-                    />
+                    <Bar dataKey="temperature_right" fill="var(--color-temperature_right)" radius={4} />
                   )}
                   <ChartLegend content={<ChartLegendContent />} />
-                </AreaChart>
+                </BarChart>
               </ChartContainer>
             ) : (
               <div className="flex h-[250px] items-center justify-center rounded-xl border-2 border-dashed border-border/50 bg-muted/20">
