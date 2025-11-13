@@ -7,20 +7,83 @@ import { FaUsers, FaCrown, FaUserTie, FaUser, FaChartLine } from "react-icons/fa
 import { AdminActivityChart } from "@/components/charts/admin-activity-chart";
 import { AdminUsersChart } from "@/components/charts/admin-users-chart";
 import { RecentActivityTable } from "@/components/recent-activity-table";
+import { DeviceStatsCards } from "@/components/device-stats-cards";
+import { DeviceTelemetryCard } from "@/components/device-telemetry-card";
+import { ExportTelemetryButton } from "@/components/export-telemetry-button";
 
 async function getDashboardStats() {
-  const [totalUsers, adminCount, managerCount, employeeCount, recentActivity] =
-    await Promise.all([
-      prisma.user.count(),
-      prisma.user.count({ where: { role: Role.ADMIN } }),
-      prisma.user.count({ where: { role: Role.MANAGER } }),
-      prisma.user.count({ where: { role: Role.EMPLOYEE } }),
-      prisma.activityLog.findMany({
-        take: 10,
-        orderBy: { createdAt: "desc" },
-        include: { user: true },
-      }),
-    ]);
+  const [
+    totalUsers,
+    adminCount,
+    managerCount,
+    employeeCount,
+    recentActivity,
+    totalDevices,
+    onlineDevices,
+    recentTelemetry,
+    devices,
+  ] = await Promise.all([
+    prisma.user.count(),
+    prisma.user.count({ where: { role: Role.ADMIN } }),
+    prisma.user.count({ where: { role: Role.MANAGER } }),
+    prisma.user.count({ where: { role: Role.EMPLOYEE } }),
+    prisma.activityLog.findMany({
+      take: 10,
+      orderBy: { createdAt: "desc" },
+      include: { user: true },
+    }),
+    prisma.milesightDeviceCache.count(),
+    prisma.milesightDeviceCache.count({ where: { lastStatus: "ONLINE" } }),
+    prisma.milesightDeviceTelemetry.findMany({
+      take: 200,
+      orderBy: { dataTimestamp: "desc" },
+    }),
+    prisma.milesightDeviceCache.findMany({
+      orderBy: { lastSyncAt: "desc" },
+    }),
+  ]);
+
+  // Calculate averages from latest telemetry
+  const latestByDevice = new Map();
+  recentTelemetry.forEach((t) => {
+    if (!latestByDevice.has(t.deviceId)) {
+      latestByDevice.set(t.deviceId, t);
+    }
+  });
+
+  const latestReadings = Array.from(latestByDevice.values());
+  const avgTemperature =
+    latestReadings.filter((t) => t.temperature !== null).length > 0
+      ? latestReadings
+          .filter((t) => t.temperature !== null)
+          .reduce((sum, t) => sum + (t.temperature || 0), 0) /
+        latestReadings.filter((t) => t.temperature !== null).length
+      : null;
+
+  const avgHumidity =
+    latestReadings.filter((t) => t.humidity !== null).length > 0
+      ? latestReadings
+          .filter((t) => t.humidity !== null)
+          .reduce((sum, t) => sum + (t.humidity || 0), 0) /
+        latestReadings.filter((t) => t.humidity !== null).length
+      : null;
+
+  const avgBattery =
+    latestReadings.filter((t) => t.battery !== null).length > 0
+      ? latestReadings
+          .filter((t) => t.battery !== null)
+          .reduce((sum, t) => sum + (t.battery || 0), 0) /
+        latestReadings.filter((t) => t.battery !== null).length
+      : null;
+
+  // Group telemetry by device
+  const telemetryByDevice = new Map<string, typeof recentTelemetry>();
+  recentTelemetry.forEach((t) => {
+    if (!telemetryByDevice.has(t.deviceId)) {
+      telemetryByDevice.set(t.deviceId, []);
+    }
+    telemetryByDevice.get(t.deviceId)!.push(t);
+  });
 
   return {
     totalUsers,
@@ -28,6 +91,13 @@ async function getDashboardStats() {
     managerCount,
     employeeCount,
     recentActivity,
+    totalDevices,
+    onlineDevices,
+    avgTemperature,
+    avgHumidity,
+    avgBattery,
+    devices,
+    telemetryByDevice,
   };
 }
 
@@ -37,14 +107,17 @@ export default async function AdminDashboard() {
   return (
     <DashboardLayout requiredRole={Role.ADMIN}>
       <div className="space-y-4">
-        <div>
-          <h1 className="text-2xl font-bold uppercase">ADMIN DASHBOARD</h1>
-          <p className="text-xs text-muted-foreground">
-            Manage users and monitor system activity
-          </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold uppercase">ADMIN DASHBOARD</h1>
+            <p className="text-xs text-muted-foreground">
+              Manage users, devices, and monitor system activity
+            </p>
+          </div>
+          <ExportTelemetryButton />
         </div>
 
-        {/* Stats Cards */}
+        {/* User Stats Cards */}
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <StatsCard
             title="TOTAL USERS"
@@ -76,7 +149,34 @@ export default async function AdminDashboard() {
           />
         </div>
 
-        {/* Charts */}
+        {/* Device Stats Cards */}
+        <DeviceStatsCards
+          totalDevices={stats.totalDevices}
+          onlineDevices={stats.onlineDevices}
+          avgTemperature={stats.avgTemperature}
+          avgHumidity={stats.avgHumidity}
+          avgBattery={stats.avgBattery}
+        />
+
+        {/* Device Telemetry Cards - Individual per Device */}
+        {stats.devices.length > 0 && (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {stats.devices.map((device) => {
+              const deviceTelemetry = stats.telemetryByDevice.get(device.deviceId) || [];
+              return (
+                <DeviceTelemetryCard
+                  key={device.id}
+                  deviceName={device.name || ""}
+                  deviceId={device.deviceId}
+                  deviceStatus={device.lastStatus || "UNKNOWN"}
+                  telemetryData={deviceTelemetry}
+                />
+              );
+            })}
+          </div>
+        )}
+
+        {/* User Activity Charts */}
         <div className="grid gap-4 md:grid-cols-2">
           <Card>
             <CardHeader>
