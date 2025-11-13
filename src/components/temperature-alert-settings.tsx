@@ -118,7 +118,7 @@ export function TemperatureAlertSettings({
   };
 
   return (
-    <Card className="border-border/40 bg-card/50 shadow-sm backdrop-blur-sm">
+    <Card className="border-border/40 shadow-sm" style={{ backgroundColor: '#dbffcc' }}>
       <CardHeader className="border-b pb-4">
         <div className="flex items-center justify-between">
           <div>

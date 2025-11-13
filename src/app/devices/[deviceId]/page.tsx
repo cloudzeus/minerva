@@ -156,7 +156,7 @@ export default async function DeviceDetailPage({
 
         {/* Stats Overview Cards */}
         <div className="grid gap-4 md:grid-cols-4">
-          <Card className="border-border/40 bg-card/50 shadow-sm backdrop-blur-sm">
+          <Card className="border-border/40 shadow-sm" style={{ backgroundColor: '#dbffcc' }}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-xs font-medium text-muted-foreground">
                 Total Records
@@ -169,7 +169,7 @@ export default async function DeviceDetailPage({
             </CardContent>
           </Card>
 
-          <Card className="border-border/40 bg-card/50 shadow-sm backdrop-blur-sm">
+          <Card className="border-border/40 shadow-sm" style={{ backgroundColor: '#dbffcc' }}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-xs font-medium text-muted-foreground">
                 Properties
@@ -182,7 +182,7 @@ export default async function DeviceDetailPage({
             </CardContent>
           </Card>
 
-          <Card className="border-border/40 bg-card/50 shadow-sm backdrop-blur-sm">
+          <Card className="border-border/40 shadow-sm" style={{ backgroundColor: '#dbffcc' }}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-xs font-medium text-muted-foreground">
                 Device ID
@@ -195,7 +195,7 @@ export default async function DeviceDetailPage({
             </CardContent>
           </Card>
 
-          <Card className="border-border/40 bg-card/50 shadow-sm backdrop-blur-sm">
+          <Card className="border-border/40 shadow-sm" style={{ backgroundColor: '#dbffcc' }}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-xs font-medium text-muted-foreground">
                 Last Sync
@@ -211,7 +211,7 @@ export default async function DeviceDetailPage({
 
         {/* Property Statistics */}
         {deviceStats.properties.length > 0 && (
-          <Card className="border-border/40 bg-card/50 shadow-sm backdrop-blur-sm">
+          <Card className="border-border/40 shadow-sm" style={{ backgroundColor: '#e0e1e2' }}>
             <CardHeader className="border-b pb-4">
               <CardTitle className="text-sm">Sensor Statistics</CardTitle>
             </CardHeader>
@@ -224,7 +224,8 @@ export default async function DeviceDetailPage({
                   return (
                     <div
                       key={prop}
-                      className="rounded-lg border border-border/40 bg-muted/30 p-3"
+                      className="rounded-lg border border-border/40 p-3"
+                      style={{ backgroundColor: '#ffffff' }}
                     >
                       <div className="mb-2 text-xs font-medium text-muted-foreground">
                         {prop.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
@@ -288,7 +289,7 @@ export default async function DeviceDetailPage({
 
         {/* Gateway Info */}
         {isGateway && (
-          <Card className="border-border/40 bg-card/50 shadow-sm backdrop-blur-sm">
+          <Card className="border-border/40 shadow-sm" style={{ backgroundColor: '#e0e1e2' }}>
             <CardHeader className="border-b pb-4">
               <CardTitle className="flex items-center gap-2 text-sm">
                 <FaServer className="h-4 w-4 text-blue-600" />
@@ -321,7 +322,7 @@ export default async function DeviceDetailPage({
         )}
 
         {/* Recent Telemetry Data Table */}
-        <Card className="border-border/40 bg-card/50 shadow-sm backdrop-blur-sm">
+        <Card className="border-border/40 shadow-sm" style={{ backgroundColor: '#e0e1e2' }}>
           <CardHeader className="border-b pb-4">
             <CardTitle className="text-sm">
               Recent Telemetry ({device.telemetryData.length} records)
@@ -333,7 +334,7 @@ export default async function DeviceDetailPage({
         </Card>
 
         {/* Device Technical Details */}
-        <Card className="border-border/40 bg-card/50 bg-muted/30 shadow-sm backdrop-blur-sm">
+        <Card className="border-border/40 shadow-sm" style={{ backgroundColor: '#dbffcc' }}>
           <CardHeader className="border-b pb-4">
             <CardTitle className="text-sm">Technical Details</CardTitle>
           </CardHeader>

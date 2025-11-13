@@ -36,7 +36,7 @@ export function TemperatureLineChart({
 
   if (chartData.length === 0) {
     return (
-      <Card>
+      <Card className="border-border/40 shadow-sm" style={{ backgroundColor: '#e0e1e2' }}>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-sm uppercase">
             <FaThermometerHalf className="h-4 w-4 text-orange-500" />
@@ -53,7 +53,7 @@ export function TemperatureLineChart({
   }
 
   return (
-    <Card>
+    <Card className="border-border/40 shadow-sm" style={{ backgroundColor: '#e0e1e2' }}>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-sm uppercase">
           <FaThermometerHalf className="h-4 w-4 text-orange-500" />
