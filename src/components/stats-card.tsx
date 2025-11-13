@@ -18,7 +18,7 @@ export function StatsCard({
   iconColor = "text-primary",
 }: StatsCardProps) {
   return (
-    <Card className="border-border/40 shadow-sm transition-all hover:shadow-md" style={{ backgroundColor: 'hsl(var(--muted)/.5)' }}>
+    <Card className="border-border/40 shadow-sm transition-all hover:shadow-md" style={{ backgroundColor: '#e9ffbb' }}>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
         <CardTitle className="text-xs font-medium text-muted-foreground">
           {title}
