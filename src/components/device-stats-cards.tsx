@@ -21,7 +21,7 @@ export function DeviceStatsCards({
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
       {/* Total Devices */}
-      <Card className="border-border/40 bg-card/50 shadow-sm backdrop-blur-sm transition-all hover:shadow-md">
+      <Card className="border-border/40 shadow-sm transition-all hover:shadow-md" style={{ backgroundColor: 'hsl(var(--muted)/.5)' }}>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-xs font-medium text-muted-foreground">
             Total Devices
@@ -35,7 +35,7 @@ export function DeviceStatsCards({
       </Card>
 
       {/* Online Devices */}
-      <Card className="border-border/40 bg-card/50 shadow-sm backdrop-blur-sm transition-all hover:shadow-md">
+      <Card className="border-border/40 shadow-sm transition-all hover:shadow-md" style={{ backgroundColor: 'hsl(var(--muted)/.5)' }}>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-xs font-medium text-muted-foreground">
             Online
@@ -53,7 +53,7 @@ export function DeviceStatsCards({
       </Card>
 
       {/* Average Temperature */}
-      <Card className="border-border/40 bg-card/50 shadow-sm backdrop-blur-sm transition-all hover:shadow-md">
+      <Card className="border-border/40 shadow-sm transition-all hover:shadow-md" style={{ backgroundColor: 'hsl(var(--muted)/.5)' }}>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-xs font-medium text-muted-foreground">
             Avg Temperature
@@ -69,7 +69,7 @@ export function DeviceStatsCards({
       </Card>
 
       {/* UG65 Gateway Status */}
-      <Card className="border-border/40 bg-card/50 shadow-sm backdrop-blur-sm transition-all hover:shadow-md">
+      <Card className="border-border/40 shadow-sm transition-all hover:shadow-md" style={{ backgroundColor: 'hsl(var(--muted)/.5)' }}>
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-xs font-medium text-muted-foreground">
             UG65 Gateways
