@@ -94,14 +94,18 @@ export function DeviceTelemetryCard({
         });
       }
     });
-    return Array.from(props);
-  }, [telemetryData]);
+    const propsArray = Array.from(props);
+    console.log(`[${deviceName}] All detected properties:`, propsArray);
+    return propsArray;
+  }, [telemetryData, deviceName]);
 
   // Get latest values for each property
   const latestValues = React.useMemo(() => {
     if (!latestReading?.sensorData) return {};
-    return JSON.parse(latestReading.sensorData);
-  }, [latestReading]);
+    const parsed = JSON.parse(latestReading.sensorData);
+    console.log(`[${deviceName}] Latest sensor values:`, parsed);
+    return parsed;
+  }, [latestReading, deviceName]);
 
   // Prepare chart data with ALL numeric properties
   const allData = React.useMemo(() => {
@@ -404,8 +408,8 @@ export function DeviceTelemetryCard({
             )}
 
             {/* All Properties List */}
-            {allProperties.length > 2 && (
-              <details className="group mt-4 rounded-lg border border-border/40 bg-muted/20 p-4">
+            {allProperties.length > 0 && (
+              <details className="group mt-4 rounded-lg border border-border/40 bg-muted/20 p-4" open>
                 <summary className="cursor-pointer text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
                   <span className="inline-flex items-center gap-2">
                     All Sensor Properties
@@ -417,7 +421,7 @@ export function DeviceTelemetryCard({
                 <div className="mt-4 grid grid-cols-2 gap-2">
                   {allProperties.map((prop) => {
                     const value = latestValues[prop];
-                    const config = propertyIcons[prop] || { icon: FaChartLine, color: "text-gray-500" };
+                    const config = propertyIcons[prop] || { icon: FaChartLine, color: "text-gray-500", unit: "" };
                     const Icon = config.icon;
                     
                     return (

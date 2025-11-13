@@ -17,13 +17,11 @@ import {
   FaCircle,
   FaArrowLeft,
   FaThermometerHalf,
-  FaTint,
   FaBatteryHalf,
   FaChartLine,
   FaServer,
 } from "react-icons/fa";
 import { TemperatureLineChart } from "@/components/charts/temperature-line-chart";
-import { HumidityLineChart } from "@/components/charts/humidity-line-chart";
 import { BatteryLineChart } from "@/components/charts/battery-line-chart";
 import { MultiMeasurementChart } from "@/components/charts/multi-measurement-chart";
 import { DeviceTelemetryTable } from "@/components/device-telemetry-table";
@@ -258,11 +256,10 @@ export default async function DeviceDetailPage({
                 data={device.telemetryData}
                 title="Temperature Trends"
               />
-              <HumidityLineChart data={device.telemetryData} title="Humidity Trends" />
+              <BatteryLineChart data={device.telemetryData} title="Battery Level" />
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <BatteryLineChart data={device.telemetryData} title="Battery Level" />
+            <div className="grid gap-4">
               <MultiMeasurementChart
                 data={device.telemetryData}
                 title="All Measurements"

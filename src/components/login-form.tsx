@@ -95,18 +95,6 @@ export function LoginForm() {
             {isLoading ? "SIGNING IN..." : "SIGN IN"}
           </Button>
         </form>
-        <div className="mt-6 space-y-2 rounded-lg bg-muted p-4 text-xs">
-          <p className="font-semibold">Demo Credentials:</p>
-          <p>
-            <strong>Admin:</strong> admin@minerva.com / Admin123!
-          </p>
-          <p>
-            <strong>Manager:</strong> manager@minerva.com / Manager123!
-          </p>
-          <p>
-            <strong>Employee:</strong> employee@minerva.com / Employee123!
-          </p>
-        </div>
       </CardContent>
     </Card>
   );
