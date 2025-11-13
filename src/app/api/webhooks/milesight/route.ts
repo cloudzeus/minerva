@@ -130,6 +130,33 @@ export async function POST(request: NextRequest) {
         
         if (eventType === "DEVICE_DATA" && eventData && deviceId) {
           console.log("📊 Processing telemetry data...");
+          
+          // Ensure device exists in cache (upsert)
+          console.log("🔍 Checking if device exists in cache...");
+          await prisma.milesightDeviceCache.upsert({
+            where: { deviceId },
+            update: {
+              name: deviceName || undefined,
+              sn: deviceSn || undefined,
+              devEUI: deviceDevEUI || undefined,
+              deviceType: deviceModel || undefined,
+              lastSyncAt: new Date(),
+            },
+            create: {
+              deviceId,
+              name: deviceName || null,
+              sn: deviceSn || null,
+              devEUI: deviceDevEUI || null,
+              imei: null,
+              description: null,
+              tag: null,
+              lastStatus: "ONLINE",
+              deviceType: deviceModel || null,
+              lastSyncAt: new Date(),
+            },
+          });
+          console.log("✅ Device exists/created in cache");
+          
           const dataPayload = eventData.payload || {};
           console.log("Data Payload Keys:", Object.keys(dataPayload));
           console.log("Full Data Payload:", JSON.stringify(dataPayload, null, 2));
