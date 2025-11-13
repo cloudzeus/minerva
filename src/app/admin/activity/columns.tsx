@@ -25,16 +25,19 @@ export const activityColumns: ColumnDef<ActivityLogTableData>[] = [
   {
     accessorKey: "type",
     header: "Type",
-    cell: ({ row }) => (
-      <div className="flex items-center gap-2">
-        <FaCircle
-          className={`h-2 w-2 ${
-            activityColors[row.getValue("type")] || "text-gray-500"
-          }`}
-        />
-        <span className="font-medium">{row.getValue("type")}</span>
-      </div>
-    ),
+    cell: ({ row }) => {
+      const type = row.getValue("type") as string;
+      return (
+        <div className="flex items-center gap-2">
+          <FaCircle
+            className={`h-2 w-2 ${
+              activityColors[type] || "text-gray-500"
+            }`}
+          />
+          <span className="font-medium">{type}</span>
+        </div>
+      );
+    },
     enableSorting: true,
     enableHiding: true,
   },

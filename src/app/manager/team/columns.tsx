@@ -31,8 +31,9 @@ export const teamMemberColumns: ColumnDef<TeamMemberTableData>[] = [
   {
     accessorKey: "isActive",
     header: "Status",
-    cell: ({ row }) =>
-      row.getValue("isActive") ? (
+    cell: ({ row }) => {
+      const isActive = row.getValue("isActive") as boolean;
+      return isActive ? (
         <Badge variant="default" className="gap-1 text-xs">
           <FaToggleOn className="text-green-500" />
           Active
@@ -42,7 +43,8 @@ export const teamMemberColumns: ColumnDef<TeamMemberTableData>[] = [
           <FaToggleOff className="text-gray-500" />
           Inactive
         </Badge>
-      ),
+      );
+    },
     enableSorting: true,
     enableHiding: true,
   },
@@ -56,13 +58,14 @@ export const teamMemberColumns: ColumnDef<TeamMemberTableData>[] = [
   {
     accessorKey: "lastLoginAt",
     header: "Last Login",
-    cell: ({ row }) => (
-      <span className="text-muted-foreground">
-        {row.getValue("lastLoginAt")
-          ? formatDateTime(row.getValue("lastLoginAt"))
-          : "Never"}
-      </span>
-    ),
+    cell: ({ row }) => {
+      const lastLoginAt = row.getValue("lastLoginAt") as Date | null;
+      return (
+        <span className="text-muted-foreground">
+          {lastLoginAt ? formatDateTime(lastLoginAt) : "Never"}
+        </span>
+      );
+    },
     enableSorting: true,
     enableHiding: true,
   },

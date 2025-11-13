@@ -1,7 +1,7 @@
 "use client";
 
 import { ColumnDef } from "@tanstack/react-table";
-import { User } from "@prisma/client";
+import { User, Role } from "@prisma/client";
 import { RoleBadge } from "@/components/role-badge";
 import { Badge } from "@/components/ui/badge";
 import { formatDateTime } from "@/lib/utils";
@@ -39,18 +39,22 @@ export function createUserColumns(
       enableSorting: true,
       enableHiding: true,
     },
-    {
-      accessorKey: "role",
-      header: "Role",
-      cell: ({ row }) => <RoleBadge role={row.getValue("role")} />,
-      enableSorting: true,
-      enableHiding: true,
+  {
+    accessorKey: "role",
+    header: "Role",
+    cell: ({ row }) => {
+      const role = row.getValue("role") as Role;
+      return <RoleBadge role={role} />;
     },
+    enableSorting: true,
+    enableHiding: true,
+  },
     {
       accessorKey: "isActive",
       header: "Status",
-      cell: ({ row }) =>
-        row.getValue("isActive") ? (
+      cell: ({ row }) => {
+        const isActive = row.getValue("isActive") as boolean;
+        return isActive ? (
           <Badge variant="default" className="gap-1 text-xs">
             <FaToggleOn className="text-green-500" />
             Active
@@ -60,7 +64,8 @@ export function createUserColumns(
             <FaToggleOff className="text-gray-500" />
             Inactive
           </Badge>
-        ),
+        );
+      },
       enableSorting: true,
       enableHiding: true,
     },
