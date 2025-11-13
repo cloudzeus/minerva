@@ -1,7 +1,8 @@
 /**
- * Email notification service for temperature alerts
- * TODO: Configure SMTP settings in environment variables
+ * Email notification service for temperature alerts using Brevo API
  */
+
+import * as brevo from "@getbrevo/brevo";
 
 export interface TemperatureAlertEmail {
   deviceId: string;
@@ -15,59 +16,70 @@ export interface TemperatureAlertEmail {
 }
 
 /**
- * Send temperature alert email
+ * Send temperature alert email via Brevo
  */
 export async function sendTemperatureAlertEmail(alert: TemperatureAlertEmail) {
   try {
-    console.log("[Email Service] Sending temperature alert:", {
+    const brevoApiKey = process.env.BREVO_KEY;
+    const fromEmail = process.env.BREVO_FROM_EMAIL || "alerts@minerva.wwa.gr";
+    const fromName = process.env.BREVO_FROM_NAME || "MINERVA Alerts";
+
+    if (!brevoApiKey) {
+      console.error("[Email Service] BREVO_KEY not configured");
+      return {
+        success: false,
+        error: "Email service not configured (missing BREVO_KEY)",
+      };
+    }
+
+    console.log("[Email Service] Sending temperature alert via Brevo:", {
       deviceName: alert.deviceName,
       currentTemp: alert.currentTemperature,
       alertType: alert.alertType,
       recipients: alert.recipients,
     });
 
-    // TODO: Implement actual email sending using nodemailer or similar
-    // For now, we'll log the alert and prepare the email content
-    
+    // Initialize Brevo API
+    const apiInstance = new brevo.TransactionalEmailsApi();
+    apiInstance.setApiKey(
+      brevo.TransactionalEmailsApiApiKeys.apiKey,
+      brevoApiKey
+    );
+
     const subject = `🚨 Temperature Alert: ${alert.deviceName}`;
-    const message = generateEmailBody(alert);
+    const htmlContent = generateEmailBody(alert);
 
-    // If you have SMTP configured, uncomment and configure this:
-    /*
-    const nodemailer = require('nodemailer');
-    const transporter = nodemailer.createTransporter({
-      host: process.env.SMTP_HOST,
-      port: parseInt(process.env.SMTP_PORT || '587'),
-      secure: process.env.SMTP_SECURE === 'true',
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASSWORD,
-      },
-    });
+    // Prepare email
+    const sendSmtpEmail = new brevo.SendSmtpEmail();
+    sendSmtpEmail.subject = subject;
+    sendSmtpEmail.htmlContent = htmlContent;
+    sendSmtpEmail.sender = {
+      name: fromName,
+      email: fromEmail,
+    };
+    sendSmtpEmail.to = alert.recipients.map((email) => ({
+      email,
+      name: email.split("@")[0],
+    }));
 
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM || 'alerts@minerva.com',
-      to: alert.recipients.join(', '),
-      subject,
-      html: message,
-    });
-    */
+    // Send email via Brevo
+    const response = await apiInstance.sendTransacEmail(sendSmtpEmail);
 
-    console.log("[Email Service] Email prepared:", {
-      subject,
-      to: alert.recipients.join(", "),
-      preview: message.substring(0, 100),
+    console.log("[Email Service] ✅ Email sent successfully via Brevo:", {
+      messageId: response.messageId,
+      recipients: alert.recipients.length,
     });
 
     return {
       success: true,
       emailsSent: alert.recipients.length,
+      messageId: response.messageId,
     };
   } catch (error: any) {
-    console.error("[Email Service] Failed to send alert:", error);
+    console.error("[Email Service] Failed to send alert via Brevo:", error);
     return {
       success: false,
-      error: error.message,
+      error: error.message || "Failed to send email",
     };
   }
 }
