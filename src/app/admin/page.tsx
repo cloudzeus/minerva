@@ -140,24 +140,26 @@ export default async function AdminDashboard() {
           initialOnlineGateways={stats.onlineGateways}
         />
 
-        {/* Device Telemetry Cards - Individual per Device */}
+        {/* Device Telemetry Cards - Only TS302 Temperature Sensors */}
         {stats.devices.length > 0 && (
-          <div className="grid auto-rows-min gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {stats.devices.map((device) => {
-              const deviceTelemetry = stats.telemetryByDevice.get(device.deviceId) || [];
-              return (
-                <RealtimeDeviceCard
-                  key={device.id}
-                  deviceName={device.name || ""}
-                  deviceId={device.deviceId}
-                  deviceStatus={device.lastStatus || "UNKNOWN"}
-                  deviceType={device.deviceType || undefined}
-                  deviceModel={device.deviceType || undefined}
-                  initialTelemetryData={deviceTelemetry}
-                  userRole={user?.role}
-                />
-              );
-            })}
+          <div className="grid auto-rows-min gap-4 md:grid-cols-2">
+            {stats.devices
+              .filter((device) => device.deviceType !== "UG65") // Filter out UG65 gateways
+              .map((device) => {
+                const deviceTelemetry = stats.telemetryByDevice.get(device.deviceId) || [];
+                return (
+                  <RealtimeDeviceCard
+                    key={device.id}
+                    deviceName={device.name || ""}
+                    deviceId={device.deviceId}
+                    deviceStatus={device.lastStatus || "UNKNOWN"}
+                    deviceType={device.deviceType || undefined}
+                    deviceModel={device.deviceType || undefined}
+                    initialTelemetryData={deviceTelemetry}
+                    userRole={user?.role}
+                  />
+                );
+              })}
           </div>
         )}
       </div>

@@ -148,23 +148,35 @@ export function DeviceTelemetryCard({
         return now - item.timestamp <= timeRanges[timeRange];
       });
 
-  // Sample data to show 20 bars per hour (one bar every 3 minutes)
+  // Sample data to always show exactly 20 bars regardless of time range
   const chartData = React.useMemo(() => {
     if (filteredData.length === 0) return allData;
     
+    // Calculate dynamic sampling interval to get exactly 20 bars
+    const targetBars = 20;
+    const timeRangeMs = timeRange === "all" 
+      ? Number.MAX_SAFE_INTEGER 
+      : timeRanges[timeRange];
+    const samplingInterval = timeRangeMs / targetBars;
+    
     const sampled: any[] = [];
-    const threeMinutes = 3 * 60 * 1000; // 20 bars in 60 minutes = 3 minutes per bar
     let lastTimestamp = 0;
     
     filteredData.forEach((item) => {
-      if (item.timestamp - lastTimestamp >= threeMinutes || sampled.length === 0) {
+      if (item.timestamp - lastTimestamp >= samplingInterval || sampled.length === 0) {
         sampled.push(item);
         lastTimestamp = item.timestamp;
       }
     });
     
+    // If we have fewer than 20 bars and more data available, return all filtered data
+    // This handles cases where data points are sparse
+    if (sampled.length < targetBars && filteredData.length > sampled.length) {
+      return filteredData;
+    }
+    
     return sampled;
-  }, [filteredData, allData]);
+  }, [filteredData, allData, timeRange, timeRanges]);
 
   // Only show temperature_left and temperature_right in chart
   const hasTemperatureLeft = allProperties.includes("temperature_left");
