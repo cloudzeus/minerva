@@ -131,31 +131,38 @@ export async function POST(request: NextRequest) {
         if (eventType === "DEVICE_DATA" && eventData && deviceId) {
           console.log("📊 Processing telemetry data...");
           
-          // Ensure device exists in cache (upsert)
+          // Check if device exists in cache - ONLY process known devices
           console.log("🔍 Checking if device exists in cache...");
-          await prisma.milesightDeviceCache.upsert({
+          const existingDevice = await prisma.milesightDeviceCache.findUnique({
             where: { deviceId },
-            update: {
+          });
+
+          if (!existingDevice) {
+            console.warn(
+              `⚠️ Device ${deviceId} (${deviceName}) not registered in system. Skipping telemetry.`
+            );
+            console.warn(
+              "   To receive data from this device, add it via Admin → Devices → Milesight Devices"
+            );
+            eventsProcessed++;
+            continue;
+          }
+          
+          console.log("✅ Device found in cache:", existingDevice.name);
+          
+          // Update device info from webhook
+          await prisma.milesightDeviceCache.update({
+            where: { deviceId },
+            data: {
               name: deviceName || undefined,
               sn: deviceSn || undefined,
               devEUI: deviceDevEUI || undefined,
               deviceType: deviceModel || undefined,
-              lastSyncAt: new Date(),
-            },
-            create: {
-              deviceId,
-              name: deviceName || null,
-              sn: deviceSn || null,
-              devEUI: deviceDevEUI || null,
-              imei: null,
-              description: null,
-              tag: null,
               lastStatus: "ONLINE",
-              deviceType: deviceModel || null,
               lastSyncAt: new Date(),
             },
           });
-          console.log("✅ Device exists/created in cache");
+          console.log("✅ Device info updated");
           
           const dataPayload = eventData.payload || {};
           console.log("Data Payload Keys:", Object.keys(dataPayload));
