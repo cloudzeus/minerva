@@ -55,6 +55,16 @@ export async function saveMilesightSettings(formData: FormData) {
   const skipTokenRequest = formData.get("skipTokenRequest") === "true";
 
   try {
+    console.log("=".repeat(80));
+    console.log("[Milesight Settings] Starting configuration...");
+    console.log("[Milesight Settings] User:", currentUser.email);
+    console.log("[Milesight Settings] Name:", name);
+    console.log("[Milesight Settings] Enabled:", enabled);
+    console.log("[Milesight Settings] Base URL:", baseUrl);
+    console.log("[Milesight Settings] Client ID:", clientId);
+    console.log("[Milesight Settings] Skip Token Request:", skipTokenRequest);
+    console.log("=".repeat(80));
+
     // First, test the credentials by requesting a token
     let accessToken: string | null = null;
     let refreshToken: string | null = null;
@@ -64,7 +74,8 @@ export async function saveMilesightSettings(formData: FormData) {
     if (enabled && clientSecret !== "••••••••" && !skipTokenRequest) {
       // Only request token if enabled, secret was changed, and not skipping
       try {
-        console.log("[Milesight] Attempting token request to:", `${baseUrl}/uc/account/api/oauth/token`);
+        console.log("\n🔑 [Milesight] Requesting access token...");
+        console.log("[Milesight] Token endpoint:", `${baseUrl}/uc/account/api/oauth/token`);
         console.log("[Milesight] Client ID:", clientId);
         console.log("[Milesight] Client Secret length:", clientSecret?.length || 0);
         
@@ -74,6 +85,13 @@ export async function saveMilesightSettings(formData: FormData) {
           clientSecret,
         });
 
+        console.log("[Milesight] Token response received:", {
+          hasAccessToken: !!tokenResponse.access_token,
+          hasRefreshToken: !!tokenResponse.refresh_token,
+          expiresIn: tokenResponse.expires_in,
+          accessTokenPreview: tokenResponse.access_token?.substring(0, 20) + "...",
+        });
+
         accessToken = tokenResponse.access_token;
         refreshToken = tokenResponse.refresh_token || null;
         accessTokenExpiresAt = calculateTokenExpiry(tokenResponse.expires_in);
@@ -81,7 +99,9 @@ export async function saveMilesightSettings(formData: FormData) {
         // Refresh token typically expires in 30 days (assume 30 days if not provided)
         refreshTokenExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
-        console.log("[Milesight] Token received successfully");
+        console.log("✅ [Milesight] Token received successfully!");
+        console.log("[Milesight] Access token expires at:", accessTokenExpiresAt);
+        console.log("[Milesight] Refresh token expires at:", refreshTokenExpiresAt);
 
         // Verify the token works (optional, may fail for some APIs)
         try {
@@ -95,16 +115,26 @@ export async function saveMilesightSettings(formData: FormData) {
           // Don't fail - verification endpoint might not exist
         }
       } catch (error: any) {
-        console.error("[Milesight] Token request error:", error);
+        console.error("❌ [Milesight] Token request failed!");
+        console.error("[Milesight] Error:", error.message);
+        console.error("[Milesight] Full error:", error);
+        console.error("=".repeat(80));
         return {
           success: false,
           error: `Failed to connect to Milesight: ${error.message}\n\nTip: Check your Base URL, Client ID, and Client Secret. You can also try saving with "Skip Token Request" to save credentials first.`,
         };
       }
+    } else {
+      console.log("⚠️ [Milesight] Skipping token request:");
+      console.log("  - Enabled:", enabled);
+      console.log("  - Client Secret Changed:", clientSecret !== "••••••••");
+      console.log("  - Skip Token Request:", skipTokenRequest);
     }
 
     // Check if settings exist
+    console.log("\n💾 [Milesight] Saving to database...");
     const existingSettings = await prisma.milesightSettings.findFirst();
+    console.log("[Milesight] Existing settings:", existingSettings ? "Found" : "Not found");
 
     const settingsData = {
       name,
