@@ -160,6 +160,8 @@ export default async function ManagerDashboard() {
                   deviceName={device.name || ""}
                   deviceId={device.deviceId}
                   deviceStatus={device.lastStatus || "UNKNOWN"}
+                  deviceType={device.deviceType || undefined}
+                  deviceModel={device.deviceType || undefined}
                   telemetryData={deviceTelemetry}
                 />
               );
