@@ -33,9 +33,14 @@ export function RealtimeDeviceCard({
       // Update ONLY the current sensor values, not the chart
       const newValues: Record<string, number> = {};
       
-      if (data.data?.temperature) newValues.temperature = data.data.temperature;
-      if (data.data?.humidity) newValues.humidity = data.data.humidity;
-      if (data.data?.battery) newValues.battery = data.data.battery;
+      // Extract all numeric sensor values from the broadcast
+      if (data.data) {
+        Object.entries(data.data).forEach(([key, value]) => {
+          if (typeof value === 'number') {
+            newValues[key] = value;
+          }
+        });
+      }
       
       setLatestValues(prev => ({ ...prev, ...newValues }));
     }

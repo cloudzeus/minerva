@@ -232,7 +232,7 @@ export async function POST(request: NextRequest) {
           // Check temperature alerts for thermometer devices (TS302, etc.)
           await checkTemperatureAlerts(actualDeviceId, deviceName || deviceId, dataPayload);
 
-          // Broadcast real-time event to all connected clients
+          // Broadcast real-time event to all connected clients - include actual sensor values
           const broadcastData = {
             type: "new_telemetry",
             timestamp: Date.now(),
@@ -240,9 +240,7 @@ export async function POST(request: NextRequest) {
               deviceId: actualDeviceId,
               deviceName,
               eventType,
-              temperature: temperature ? parseFloat(temperature) : null,
-              humidity: humidity ? parseFloat(humidity) : null,
-              battery: battery ? parseInt(battery) : null,
+              ...dataPayload, // Include all sensor data (temperature_left, temperature_right, battery, etc.)
             },
           };
           console.log("📡 Broadcasting to SSE clients:", broadcastData);
