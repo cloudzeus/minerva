@@ -11,15 +11,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Area, AreaChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import {
-  ChartConfig,
-  ChartContainer,
-  ChartLegend,
-  ChartLegendContent,
-  ChartTooltip,
-  ChartTooltipContent,
-} from "@/components/ui/chart";
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from "recharts";
 import { format } from "date-fns";
 import {
   FaThermometerHalf,
@@ -154,18 +155,8 @@ export function DeviceTelemetryCard({
     return allProperties.filter(prop => !excludeFromChart.includes(prop));
   }, [allProperties]);
 
-  // Build dynamic chart config (only for chart properties)
-  const dynamicChartConfig: ChartConfig = React.useMemo(() => {
-    const config: ChartConfig = {};
-    chartProperties.forEach((prop, index) => {
-      const chartIndex = (index % 5) + 1;
-      config[prop] = {
-        label: prop.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-        color: `hsl(var(--chart-${chartIndex}))`,
-      };
-    });
-    return config;
-  }, [chartProperties]);
+  // Color mapping for chart lines
+  const chartColors = ["#3b82f6", "#ef4444", "#10b981", "#f59e0b", "#8b5cf6"];
 
   // Get the top 2 most important properties to display in sensor readings
   const displayProperties = React.useMemo(() => {
@@ -297,71 +288,71 @@ export function DeviceTelemetryCard({
               })}
             </div>
 
-            {/* Interactive Area Chart - Temperature & Voltage Only */}
+            {/* Temperature Line Chart - Working Implementation */}
             {chartData.length > 0 && chartProperties.length > 0 ? (
-              <ChartContainer config={dynamicChartConfig}>
-                <AreaChart
-                  accessibilityLayer
-                  data={chartData}
-                  margin={{
-                    left: 12,
-                    right: 12,
-                  }}
-                >
-                  <CartesianGrid vertical={false} />
-                  <XAxis
-                    dataKey="timestamp"
-                    tickLine={false}
-                    axisLine={false}
-                    tickMargin={8}
-                    minTickGap={32}
-                    tickFormatter={(value) => {
-                      try {
-                        const timestamp = Number(value);
-                        if (!timestamp || isNaN(timestamp)) return "";
-                        const date = new Date(timestamp);
-                        if (isNaN(date.getTime())) return "";
-                        return format(date, "HH:mm");
-                      } catch (error) {
-                        return "";
-                      }
-                    }}
-                  />
-                  <ChartTooltip
-                    cursor={false}
-                    content={
-                      <ChartTooltipContent
-                        labelFormatter={(value) => {
-                          try {
-                            const timestamp = Number(value);
-                            if (!timestamp || isNaN(timestamp)) return "Invalid date";
-                            const date = new Date(timestamp);
-                            if (isNaN(date.getTime())) return "Invalid date";
-                            return format(date, "PPpp");
-                          } catch (error) {
-                            return "Invalid date";
-                          }
-                        }}
-                      />
-                    }
-                  />
-                  {chartProperties.map((prop, index) => {
-                    const chartIndex = (index % 5) + 1;
-                    return (
-                      <Area
+              <div className="mt-4">
+                <ResponsiveContainer width="100%" height={280}>
+                  <LineChart data={chartData}>
+                    <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                    <XAxis
+                      dataKey="timestamp"
+                      tickFormatter={(value) => {
+                        try {
+                          const timestamp = Number(value);
+                          if (!timestamp || isNaN(timestamp)) return "";
+                          const date = new Date(timestamp);
+                          if (isNaN(date.getTime())) return "";
+                          return format(date, "HH:mm");
+                        } catch (error) {
+                          return "";
+                        }
+                      }}
+                      style={{ fontSize: "0.75rem" }}
+                    />
+                    <YAxis
+                      label={{
+                        value: "Temperature (°C)",
+                        angle: -90,
+                        position: "insideLeft",
+                        style: { fontSize: "0.75rem" },
+                      }}
+                      style={{ fontSize: "0.75rem" }}
+                    />
+                    <Tooltip
+                      labelFormatter={(value) => {
+                        try {
+                          const timestamp = Number(value);
+                          if (!timestamp || isNaN(timestamp)) return "Invalid date";
+                          const date = new Date(timestamp);
+                          if (isNaN(date.getTime())) return "Invalid date";
+                          return format(date, "PPpp");
+                        } catch (error) {
+                          return "Invalid date";
+                        }
+                      }}
+                      formatter={(value: number, name: string) => {
+                        const prop = name as string;
+                        const unit = propertyIcons[prop]?.unit || "";
+                        return [`${value.toFixed(1)}${unit}`, prop.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())];
+                      }}
+                      contentStyle={{ fontSize: "0.75rem" }}
+                    />
+                    <Legend wrapperStyle={{ fontSize: "0.75rem" }} />
+                    {chartProperties.map((prop, index) => (
+                      <Line
                         key={prop}
+                        type="monotone"
                         dataKey={prop}
-                        type="natural"
-                        fill={`hsl(var(--chart-${chartIndex}))`}
-                        fillOpacity={0.4}
-                        stroke={`hsl(var(--chart-${chartIndex}))`}
-                        stackId="a"
+                        stroke={chartColors[index % chartColors.length]}
+                        strokeWidth={2}
+                        dot={{ fill: chartColors[index % chartColors.length], r: 3 }}
+                        activeDot={{ r: 5 }}
+                        name={prop.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
                       />
-                    );
-                  })}
-                  <ChartLegend content={<ChartLegendContent />} />
-                </AreaChart>
-              </ChartContainer>
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
             ) : (
               <div className="flex h-[250px] items-center justify-center rounded-xl border-2 border-dashed border-border/50 bg-muted/20">
                 <div className="text-center">
