@@ -152,7 +152,7 @@ export function DeviceTelemetryCard({
   const chartData = React.useMemo(() => {
     if (filteredData.length === 0) return allData;
     
-    const sampled = [];
+    const sampled: any[] = [];
     const threeMinutes = 3 * 60 * 1000; // 20 bars in 60 minutes = 3 minutes per bar
     let lastTimestamp = 0;
     
