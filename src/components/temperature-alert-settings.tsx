@@ -148,7 +148,7 @@ export function TemperatureAlertSettings({
           {/* Temperature Range */}
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="minTemp" className="text-xs">
+              <Label htmlFor="minTemp" className="text-xs font-semibold">
                 <FaThermometerHalf className="mr-1 inline h-3 w-3 text-blue-500" />
                 Minimum Temperature (°C)
               </Label>
@@ -157,14 +157,19 @@ export function TemperatureAlertSettings({
                 type="number"
                 step="0.1"
                 value={minTemp}
-                onChange={(e) => setMinTemp(parseFloat(e.target.value))}
-                placeholder="0"
+                onChange={(e) => setMinTemp(parseFloat(e.target.value) || 0)}
+                placeholder="-20"
                 className="text-sm"
+                min={-100}
+                max={100}
               />
+              <p className="text-xs text-muted-foreground">
+                Alert when temperature drops below this value (supports negative values)
+              </p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="maxTemp" className="text-xs">
+              <Label htmlFor="maxTemp" className="text-xs font-semibold">
                 <FaThermometerHalf className="mr-1 inline h-3 w-3 text-red-500" />
                 Maximum Temperature (°C)
               </Label>
@@ -173,10 +178,15 @@ export function TemperatureAlertSettings({
                 type="number"
                 step="0.1"
                 value={maxTemp}
-                onChange={(e) => setMaxTemp(parseFloat(e.target.value))}
+                onChange={(e) => setMaxTemp(parseFloat(e.target.value) || 30)}
                 placeholder="30"
                 className="text-sm"
+                min={-100}
+                max={100}
               />
+              <p className="text-xs text-muted-foreground">
+                Alert when temperature rises above this value
+              </p>
             </div>
           </div>
 
@@ -210,10 +220,13 @@ export function TemperatureAlertSettings({
 
           {/* Email Recipients */}
           <div className="space-y-2">
-            <Label className="text-xs">
-              <FaEnvelope className="mr-1 inline h-3 w-3" />
-              Email Recipients
+            <Label className="text-xs font-semibold">
+              <FaEnvelope className="mr-1 inline h-3 w-3 text-blue-600" />
+              Email Recipients for Alerts
             </Label>
+            <p className="text-xs text-muted-foreground mb-2">
+              Enter email addresses that will receive temperature alert notifications
+            </p>
 
             <div className="space-y-2">
               {emailRecipients.map((email, index) => (
@@ -222,8 +235,9 @@ export function TemperatureAlertSettings({
                     type="email"
                     value={email}
                     onChange={(e) => updateRecipient(index, e.target.value)}
-                    placeholder="user@example.com"
+                    placeholder="engineer@company.com"
                     className="text-sm"
+                    required
                   />
                   {emailRecipients.length > 1 && (
                     <Button
@@ -231,6 +245,7 @@ export function TemperatureAlertSettings({
                       variant="outline"
                       size="icon"
                       onClick={() => removeRecipient(index)}
+                      title="Remove this recipient"
                     >
                       <FaTimes className="h-3 w-3" />
                     </Button>
@@ -247,7 +262,7 @@ export function TemperatureAlertSettings({
               className="w-full text-xs"
             >
               <FaPlus className="mr-2 h-3 w-3" />
-              Add Recipient
+              Add Another Recipient
             </Button>
           </div>
 
