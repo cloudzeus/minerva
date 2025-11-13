@@ -14,6 +14,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { broadcastToClients } from "@/lib/realtime-broadcast";
+import { sendTemperatureAlertEmail } from "@/lib/email";
 
 export async function POST(request: NextRequest) {
   try {
@@ -228,6 +229,9 @@ export async function POST(request: NextRequest) {
           console.log("✅ Telemetry record created:", telemetryRecord.id);
           console.log("[Milesight Webhook] ✅ Stored telemetry for device:", deviceId);
 
+          // Check temperature alerts for thermometer devices (TS302, etc.)
+          await checkTemperatureAlerts(actualDeviceId, deviceName || deviceId, dataPayload);
+
           // Broadcast real-time event to all connected clients
           const broadcastData = {
             type: "new_telemetry",
@@ -309,6 +313,102 @@ export async function POST(request: NextRequest) {
       { error: "Internal server error", message: error.message },
       { status: 500 }
     );
+  }
+}
+
+/**
+ * Check if temperature exceeds thresholds and send alerts
+ */
+async function checkTemperatureAlerts(
+  deviceId: string,
+  deviceName: string,
+  sensorData: any
+) {
+  try {
+    // Get alert settings for this device
+    const alertSettings = await prisma.temperatureAlert.findUnique({
+      where: { deviceId },
+    });
+
+    if (!alertSettings || !alertSettings.enabled) {
+      return; // No alert configured or disabled
+    }
+
+    // Extract all temperature values from sensor data
+    const temperatures: { key: string; value: number }[] = [];
+    
+    Object.entries(sensorData).forEach(([key, value]) => {
+      if (
+        (key.toLowerCase().includes("temperature") || key === "temp") &&
+        typeof value === "number"
+      ) {
+        temperatures.push({ key, value });
+      }
+    });
+
+    if (temperatures.length === 0) {
+      return; // No temperature data
+    }
+
+    // Check each temperature value against thresholds
+    for (const { key, value } of temperatures) {
+      const isBelowMin = value < alertSettings.minTemperature;
+      const isAboveMax = value > alertSettings.maxTemperature;
+
+      if (isBelowMin || isAboveMax) {
+        // Check cooldown period
+        const now = new Date();
+        const lastAlertTime = alertSettings.lastAlertSentAt;
+        const cooldownMs = alertSettings.alertCooldown * 1000;
+
+        if (
+          lastAlertTime &&
+          now.getTime() - lastAlertTime.getTime() < cooldownMs
+        ) {
+          console.log(
+            `[Temperature Alert] Skipping alert for ${deviceName} - still in cooldown period`
+          );
+          continue; // Still in cooldown
+        }
+
+        // Send alert email
+        console.log(
+          `[Temperature Alert] 🚨 Temperature ${isBelowMin ? "too low" : "too high"} for ${deviceName}: ${value}°C`
+        );
+
+        const recipients = JSON.parse(alertSettings.emailRecipients);
+        
+        await sendTemperatureAlertEmail({
+          deviceId,
+          deviceName,
+          currentTemperature: value,
+          minThreshold: alertSettings.minTemperature,
+          maxThreshold: alertSettings.maxTemperature,
+          alertType: isBelowMin ? "MIN" : "MAX",
+          timestamp: now,
+          recipients,
+        });
+
+        // Update last alert time and increment counter
+        await prisma.temperatureAlert.update({
+          where: { deviceId },
+          data: {
+            lastAlertSentAt: now,
+            totalAlertsSent: alertSettings.totalAlertsSent + 1,
+          },
+        });
+
+        console.log(
+          `[Temperature Alert] ✅ Alert sent to ${recipients.length} recipient(s)`
+        );
+
+        // Only send one alert per webhook event (first threshold exceeded)
+        break;
+      }
+    }
+  } catch (error: any) {
+    console.error("[Temperature Alert] Error checking alerts:", error);
+    // Don't throw - we don't want to fail the webhook if alert checking fails
   }
 }
 

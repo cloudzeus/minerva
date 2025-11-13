@@ -275,3 +275,31 @@ model MilesightDeviceTelemetry {
   @@index([processed])
 }
 
+model TemperatureAlert {
+  id               String   @id @default(cuid())
+  
+  // Device reference
+  deviceId         String   @unique
+  
+  // Alert thresholds
+  minTemperature   Float    // Minimum acceptable temperature
+  maxTemperature   Float    // Maximum acceptable temperature
+  
+  // Notification settings
+  emailRecipients  String   @db.Text // JSON array of email addresses
+  
+  // Alert status
+  enabled          Boolean  @default(true)
+  lastAlertSentAt  DateTime?
+  alertCooldown    Int      @default(300) // Cooldown in seconds (default 5 minutes)
+  
+  // Tracking
+  totalAlertsSent  Int      @default(0)
+  
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  
+  @@index([deviceId])
+  @@index([enabled])
+}
+

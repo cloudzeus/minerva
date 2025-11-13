@@ -26,6 +26,8 @@ import { BatteryLineChart } from "@/components/charts/battery-line-chart";
 import { MultiMeasurementChart } from "@/components/charts/multi-measurement-chart";
 import { DeviceTelemetryTable } from "@/components/device-telemetry-table";
 import { ExportTelemetryButton } from "@/components/export-telemetry-button";
+import { TemperatureAlertSettings } from "@/components/temperature-alert-settings";
+import { getTemperatureAlert } from "@/app/actions/temperature-alerts";
 
 async function getDeviceWithTelemetry(deviceId: string) {
   return await prisma.milesightDeviceCache.findUnique({
@@ -93,9 +95,10 @@ export default async function DeviceDetailPage({
 }) {
   const { deviceId } = await params;
   
-  const [device, deviceStats] = await Promise.all([
+  const [device, deviceStats, temperatureAlert] = await Promise.all([
     getDeviceWithTelemetry(deviceId),
     getDeviceStats(deviceId),
+    getTemperatureAlert(deviceId).catch(() => null), // Ignore errors if user doesn't have permission
   ]);
 
   if (!device) {
@@ -105,6 +108,12 @@ export default async function DeviceDetailPage({
   const isGateway =
     device.deviceType === "GATEWAY" ||
     device.deviceType?.toUpperCase().includes("UG");
+  
+  // Check if this is a thermometer device (TS302, etc.)
+  const isThermometer =
+    device.deviceType?.toUpperCase().includes("TS") ||
+    device.name?.toUpperCase().includes("TS302") ||
+    deviceStats.properties.some((p) => p.toLowerCase().includes("temperature"));
 
   return (
     <DashboardLayout requiredRole={[Role.EMPLOYEE, Role.MANAGER, Role.ADMIN]}>
@@ -246,6 +255,15 @@ export default async function DeviceDetailPage({
               </div>
             </CardContent>
           </Card>
+        )}
+
+        {/* Temperature Alert Settings - Only for Thermometer Devices */}
+        {isThermometer && !isGateway && (
+          <TemperatureAlertSettings
+            deviceId={deviceId}
+            deviceName={device.name || `Device ${deviceId}`}
+            initialSettings={temperatureAlert}
+          />
         )}
 
         {/* Charts - Temperature Sensors Only */}
