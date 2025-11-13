@@ -8,8 +8,24 @@ import { RealtimeProvider } from "@/lib/realtime-context";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Minerva RBAC - Role-Based Access Control System",
-  description: "Modern RBAC system built with Next.js 15, Auth.js v5, and Prisma",
+  title: "MINERVA - Device Monitoring System",
+  description: "Advanced IoT device monitoring and management system with real-time telemetry, temperature alerts, and role-based access control",
+  authors: [
+    {
+      name: "Giannis Kozyris",
+      url: "https://minerva.wwa.gr",
+    },
+  ],
+  creator: "Giannis Kozyris",
+  publisher: "Giannis Kozyris",
+  keywords: [
+    "IoT",
+    "Device Monitoring",
+    "Temperature Sensors",
+    "Milesight",
+    "Real-time Telemetry",
+    "RBAC",
+  ],
 };
 
 export default function RootLayout({
