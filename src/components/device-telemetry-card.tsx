@@ -42,7 +42,6 @@ interface DeviceTelemetryCardProps {
   deviceModel?: string;
   telemetryData: MilesightDeviceTelemetry[];
   userRole?: Role;
-  realtimeLatestValues?: Record<string, number>;
 }
 
 // Icon mapping for common sensor properties
@@ -71,7 +70,6 @@ export function DeviceTelemetryCard({
   deviceModel,
   telemetryData,
   userRole,
-  realtimeLatestValues = {},
 }: DeviceTelemetryCardProps) {
   const [timeRange, setTimeRange] = React.useState("all");
   
@@ -101,12 +99,11 @@ export function DeviceTelemetryCard({
     return propsArray;
   }, [telemetryData, deviceName]);
 
-  // Get latest values for each property - merge static data with realtime updates
+  // Get latest values for each property from database
   const latestValues = React.useMemo(() => {
-    const staticValues = latestReading?.sensorData ? JSON.parse(latestReading.sensorData) : {};
-    // Override with realtime values if available
-    return { ...staticValues, ...realtimeLatestValues };
-  }, [latestReading, realtimeLatestValues]);
+    if (!latestReading?.sensorData) return {};
+    return JSON.parse(latestReading.sensorData);
+  }, [latestReading]);
 
   // Prepare chart data with ALL numeric properties
   const allData = React.useMemo(() => {
