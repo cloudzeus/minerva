@@ -59,11 +59,7 @@ const propertyIcons: Record<string, { icon: any; color: string; unit?: string }>
   snr: { icon: FaWifi, color: "text-purple-600", unit: "dB" },
 };
 
-// Color palette for dynamic chart lines
-const chartColors = [
-  "#f97316", "#fb923c", "#3b82f6", "#60a5fa", "#22c55e", "#4ade80",
-  "#a855f7", "#c084fc", "#ef4444", "#f87171", "#14b8a6", "#2dd4bf",
-];
+// Charts use CSS variables from shadcn theme: hsl(var(--chart-1)) through hsl(var(--chart-5))
 
 export function DeviceTelemetryCard({
   deviceName,
