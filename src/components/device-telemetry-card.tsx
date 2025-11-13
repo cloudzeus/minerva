@@ -297,14 +297,15 @@ export function DeviceTelemetryCard({
             {chartData.length > 0 && chartProperties.length > 0 ? (
               <ChartContainer
                 config={dynamicChartConfig}
-                className="aspect-auto h-[250px] w-full"
+                className="aspect-auto h-[300px] w-full"
               >
                 <AreaChart
-                  accessibilityLayer
                   data={chartData}
                   margin={{
-                    left: 12,
+                    top: 10,
                     right: 12,
+                    left: 12,
+                    bottom: 0,
                   }}
                 >
                   <defs>
@@ -313,33 +314,33 @@ export function DeviceTelemetryCard({
                       return (
                         <linearGradient
                           key={prop}
-                          id={`fill${prop}`}
+                          id={`gradient-${prop}-${deviceId}`}
                           x1="0"
                           y1="0"
                           x2="0"
                           y2="1"
                         >
                           <stop
-                            offset="5%"
+                            offset="0%"
                             stopColor={`hsl(var(--chart-${chartIndex}))`}
-                            stopOpacity={0.8}
+                            stopOpacity={0.3}
                           />
                           <stop
-                            offset="95%"
+                            offset="100%"
                             stopColor={`hsl(var(--chart-${chartIndex}))`}
-                            stopOpacity={0.1}
+                            stopOpacity={0}
                           />
                         </linearGradient>
                       );
                     })}
                   </defs>
-                  <CartesianGrid vertical={false} />
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
                   <XAxis
                     dataKey="timestamp"
                     tickLine={false}
                     axisLine={false}
                     tickMargin={8}
-                    minTickGap={32}
+                    minTickGap={50}
                     tickFormatter={(value) => {
                       try {
                         const timestamp = Number(value);
@@ -352,9 +353,29 @@ export function DeviceTelemetryCard({
                       }
                     }}
                   />
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={8}
+                    tickFormatter={(value) => `${value}`}
+                  />
                   <ChartTooltip
-                    cursor={false}
-                    content={<ChartTooltipContent indicator="dot" />}
+                    content={
+                      <ChartTooltipContent
+                        className="w-[200px]"
+                        labelFormatter={(value) => {
+                          try {
+                            const timestamp = Number(value);
+                            if (!timestamp || isNaN(timestamp)) return "Invalid date";
+                            const date = new Date(timestamp);
+                            if (isNaN(date.getTime())) return "Invalid date";
+                            return format(date, "PPpp");
+                          } catch (error) {
+                            return "Invalid date";
+                          }
+                        }}
+                      />
+                    }
                   />
                   {chartProperties.map((prop, index) => {
                     const chartIndex = (index % 5) + 1;
@@ -363,10 +384,10 @@ export function DeviceTelemetryCard({
                         key={prop}
                         dataKey={prop}
                         type="monotone"
-                        fill={`url(#fill${prop})`}
-                        fillOpacity={1}
                         stroke={`hsl(var(--chart-${chartIndex}))`}
                         strokeWidth={2}
+                        fill={`url(#gradient-${prop}-${deviceId})`}
+                        fillOpacity={1}
                       />
                     );
                   })}

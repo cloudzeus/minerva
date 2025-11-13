@@ -7,11 +7,11 @@ import ExcelJS from "exceljs";
 
 /**
  * Export all device telemetry data to Excel
- * SECURITY: Accessible by ADMIN, MANAGER, EMPLOYEE
+ * SECURITY: Accessible by ADMIN and MANAGER only
  */
 export async function exportTelemetryToExcel() {
-  // Allow all authenticated users to export telemetry
-  const currentUser = await requireRole(Role.EMPLOYEE);
+  // Only admins and managers can export
+  const currentUser = await requireRole([Role.ADMIN, Role.MANAGER]);
 
   try {
     // Fetch all telemetry data with device information
@@ -113,9 +113,10 @@ export async function exportTelemetryToExcel() {
 
 /**
  * Export telemetry data for a specific device
+ * SECURITY: Accessible by ADMIN and MANAGER only
  */
 export async function exportDeviceTelemetry(deviceId: string) {
-  await requireRole(Role.EMPLOYEE);
+  await requireRole([Role.ADMIN, Role.MANAGER]);
 
   try {
     const [telemetryData, device] = await Promise.all([
