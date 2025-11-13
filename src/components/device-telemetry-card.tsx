@@ -285,27 +285,30 @@ export function DeviceTelemetryCard({
               >
                 <AreaChart data={chartData}>
                   <defs>
-                    {allProperties.map((prop, index) => (
-                      <linearGradient
-                        key={prop}
-                        id={`fill-${prop}-${deviceId}`}
-                        x1="0"
-                        y1="0"
-                        x2="0"
-                        y2="1"
-                      >
-                        <stop
-                          offset="5%"
-                          stopColor={chartColors[index % chartColors.length]}
-                          stopOpacity={0.8}
-                        />
-                        <stop
-                          offset="95%"
-                          stopColor={chartColors[index % chartColors.length]}
-                          stopOpacity={0.1}
-                        />
-                      </linearGradient>
-                    ))}
+                    {allProperties.map((prop, index) => {
+                      const chartIndex = (index % 5) + 1;
+                      return (
+                        <linearGradient
+                          key={prop}
+                          id={`fill-${prop}-${deviceId}`}
+                          x1="0"
+                          y1="0"
+                          x2="0"
+                          y2="1"
+                        >
+                          <stop
+                            offset="5%"
+                            stopColor={`hsl(var(--chart-${chartIndex}))`}
+                            stopOpacity={0.8}
+                          />
+                          <stop
+                            offset="95%"
+                            stopColor={`hsl(var(--chart-${chartIndex}))`}
+                            stopOpacity={0.1}
+                          />
+                        </linearGradient>
+                      );
+                    })}
                   </defs>
                   <CartesianGrid vertical={false} />
                   <XAxis
@@ -361,16 +364,19 @@ export function DeviceTelemetryCard({
                       />
                     }
                   />
-                  {allProperties.map((prop, index) => (
-                    <Area
-                      key={prop}
-                      dataKey={prop}
-                      type="natural"
-                      fill={`url(#fill-${prop}-${deviceId})`}
-                      stroke={chartColors[index % chartColors.length]}
-                      stackId="a"
-                    />
-                  ))}
+                  {allProperties.map((prop, index) => {
+                    const chartIndex = (index % 5) + 1;
+                    return (
+                      <Area
+                        key={prop}
+                        dataKey={prop}
+                        type="natural"
+                        fill={`url(#fill-${prop}-${deviceId})`}
+                        stroke={`hsl(var(--chart-${chartIndex}))`}
+                        stackId="a"
+                      />
+                    );
+                  })}
                   <ChartLegend content={<ChartLegendContent />} />
                 </AreaChart>
               </ChartContainer>
