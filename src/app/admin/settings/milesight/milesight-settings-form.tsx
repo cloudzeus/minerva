@@ -64,6 +64,7 @@ export function MilesightSettingsForm({
 }: MilesightSettingsFormProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
+  const [isChecking, setIsChecking] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
