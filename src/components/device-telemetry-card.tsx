@@ -136,6 +136,12 @@ export function DeviceTelemetryCard({
 
   const chartData = filteredData.length > 0 ? filteredData : allData.slice(-50);
 
+  // Properties to show in chart (exclude battery and other percentage-based values)
+  const chartProperties = React.useMemo(() => {
+    const excludeFromChart = ["battery", "electricity", "humidity"]; // These use different scales
+    return allProperties.filter(prop => !excludeFromChart.includes(prop));
+  }, [allProperties]);
+
   // Build dynamic chart config (only for chart properties)
   const dynamicChartConfig: ChartConfig = React.useMemo(() => {
     const config: ChartConfig = {};
@@ -149,7 +155,7 @@ export function DeviceTelemetryCard({
     return config;
   }, [chartProperties]);
 
-  // Get the top 2 most important properties to display
+  // Get the top 2 most important properties to display in sensor readings
   const displayProperties = React.useMemo(() => {
     // Priority order: temperature > humidity > battery > voltage > others
     const priority = [
