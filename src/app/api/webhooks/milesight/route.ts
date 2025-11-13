@@ -13,6 +13,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { broadcastToClients } from "@/lib/realtime-broadcast";
 
 export async function POST(request: NextRequest) {
   try {
@@ -137,6 +138,20 @@ export async function POST(request: NextRequest) {
           });
 
           console.log("[Milesight Webhook] Stored telemetry for device:", deviceId);
+
+          // Broadcast real-time event to all connected clients
+          broadcastToClients({
+            type: "new_telemetry",
+            timestamp: Date.now(),
+            data: {
+              deviceId,
+              deviceName,
+              eventType,
+              temperature: temperature ? parseFloat(temperature) : null,
+              humidity: humidity ? parseFloat(humidity) : null,
+              battery: battery ? parseInt(battery) : null,
+            },
+          });
         }
 
         eventsProcessed++;

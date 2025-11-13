@@ -4,8 +4,8 @@ import { StatsCard } from "@/components/stats-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { prisma } from "@/lib/prisma";
 import { FaUsers, FaCrown, FaUserTie, FaUser } from "react-icons/fa";
-import { DeviceStatsCards } from "@/components/device-stats-cards";
-import { DeviceTelemetryCard } from "@/components/device-telemetry-card";
+import { RealtimeStatsCards } from "@/components/realtime-stats-cards";
+import { RealtimeDeviceCard } from "@/components/realtime-device-card";
 import { ExportTelemetryButton } from "@/components/export-telemetry-button";
 
 async function getDashboardStats() {
@@ -139,13 +139,13 @@ export default async function AdminDashboard() {
           />
         </div>
 
-        {/* Device Stats Cards */}
-        <DeviceStatsCards
-          totalDevices={stats.totalDevices}
-          onlineDevices={stats.onlineDevices}
-          avgTemperature={stats.avgTemperature}
-          avgHumidity={stats.avgHumidity}
-          avgBattery={stats.avgBattery}
+        {/* Device Stats Cards - Real-time */}
+        <RealtimeStatsCards
+          initialTotalDevices={stats.totalDevices}
+          initialOnlineDevices={stats.onlineDevices}
+          initialAvgTemperature={stats.avgTemperature}
+          initialAvgHumidity={stats.avgHumidity}
+          initialAvgBattery={stats.avgBattery}
         />
 
         {/* Device Telemetry Cards - Individual per Device */}
@@ -154,14 +154,14 @@ export default async function AdminDashboard() {
             {stats.devices.map((device) => {
               const deviceTelemetry = stats.telemetryByDevice.get(device.deviceId) || [];
               return (
-                <DeviceTelemetryCard
+                <RealtimeDeviceCard
                   key={device.id}
                   deviceName={device.name || ""}
                   deviceId={device.deviceId}
                   deviceStatus={device.lastStatus || "UNKNOWN"}
                   deviceType={device.deviceType || undefined}
                   deviceModel={device.deviceType || undefined}
-                  telemetryData={deviceTelemetry}
+                  initialTelemetryData={deviceTelemetry}
                 />
               );
             })}

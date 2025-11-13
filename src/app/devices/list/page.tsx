@@ -3,6 +3,7 @@ import { DashboardLayout } from "@/components/dashboard-layout";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { prisma } from "@/lib/prisma";
 import { DeviceListTable } from "./device-list-table";
+import { RealtimeDeviceList } from "@/components/realtime-device-list";
 
 async function getAllDevices() {
   return await prisma.milesightDeviceCache.findMany({
@@ -28,14 +29,16 @@ export default async function DeviceListPage() {
           </p>
         </div>
 
-        <Card className="border-border/40 bg-card/50 shadow-sm backdrop-blur-sm">
-          <CardHeader className="border-b pb-4">
-            <CardTitle className="text-sm">All Devices ({devices.length})</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-4">
-            <DeviceListTable devices={devices} />
-          </CardContent>
-        </Card>
+        <RealtimeDeviceList>
+          <Card className="border-border/40 bg-card/50 shadow-sm backdrop-blur-sm">
+            <CardHeader className="border-b pb-4">
+              <CardTitle className="text-sm">All Devices ({devices.length})</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-4">
+              <DeviceListTable devices={devices} />
+            </CardContent>
+          </Card>
+        </RealtimeDeviceList>
       </div>
     </DashboardLayout>
   );

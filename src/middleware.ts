@@ -8,6 +8,7 @@ const roleRoutes: Array<{ prefix: string; roles: Role[] }> = [
   { prefix: "/admin", roles: [Role.ADMIN] },
   { prefix: "/manager", roles: [Role.MANAGER, Role.ADMIN] },
   { prefix: "/employee", roles: [Role.EMPLOYEE, Role.MANAGER, Role.ADMIN] },
+  { prefix: "/devices", roles: [Role.EMPLOYEE, Role.MANAGER, Role.ADMIN] }, // All roles can view devices
 ];
 
 export default auth((req) => {

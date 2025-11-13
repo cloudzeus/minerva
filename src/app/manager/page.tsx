@@ -6,8 +6,8 @@ import { prisma } from "@/lib/prisma";
 import { FaUsers, FaTasks, FaChartLine } from "react-icons/fa";
 import { ManagerTeamChart } from "@/components/charts/manager-team-chart";
 import { RecentActivityTable } from "@/components/recent-activity-table";
-import { DeviceStatsCards } from "@/components/device-stats-cards";
-import { DeviceTelemetryCard } from "@/components/device-telemetry-card";
+import { RealtimeStatsCards } from "@/components/realtime-stats-cards";
+import { RealtimeDeviceCard } from "@/components/realtime-device-card";
 import { ExportTelemetryButton } from "@/components/export-telemetry-button";
 
 async function getManagerStats() {
@@ -140,13 +140,13 @@ export default async function ManagerDashboard() {
           />
         </div>
 
-        {/* Device Stats Cards */}
-        <DeviceStatsCards
-          totalDevices={stats.totalDevices}
-          onlineDevices={stats.onlineDevices}
-          avgTemperature={stats.avgTemperature}
-          avgHumidity={stats.avgHumidity}
-          avgBattery={stats.avgBattery}
+        {/* Device Stats Cards - Real-time */}
+        <RealtimeStatsCards
+          initialTotalDevices={stats.totalDevices}
+          initialOnlineDevices={stats.onlineDevices}
+          initialAvgTemperature={stats.avgTemperature}
+          initialAvgHumidity={stats.avgHumidity}
+          initialAvgBattery={stats.avgBattery}
         />
 
         {/* Device Telemetry Cards - Individual per Device */}
@@ -155,14 +155,14 @@ export default async function ManagerDashboard() {
             {stats.devices.map((device) => {
               const deviceTelemetry = stats.telemetryByDevice.get(device.deviceId) || [];
               return (
-                <DeviceTelemetryCard
+                <RealtimeDeviceCard
                   key={device.id}
                   deviceName={device.name || ""}
                   deviceId={device.deviceId}
                   deviceStatus={device.lastStatus || "UNKNOWN"}
                   deviceType={device.deviceType || undefined}
                   deviceModel={device.deviceType || undefined}
-                  telemetryData={deviceTelemetry}
+                  initialTelemetryData={deviceTelemetry}
                 />
               );
             })}
