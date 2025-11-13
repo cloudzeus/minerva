@@ -1,0 +1,277 @@
+// This is your Prisma schema file
+// Learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  MANAGER
+  EMPLOYEE
+}
+
+model User {
+  id           String        @id @default(cuid())
+  email        String        @unique
+  name         String?
+  passwordHash String
+  role         Role          @default(EMPLOYEE)
+  isActive     Boolean       @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  
+  activityLogs                        ActivityLog[]
+  accounts                            Account[]
+  sessions                            Session[]
+  createdMilesightSettings            MilesightSettings[] @relation("CreatedMilesightSettings")
+  updatedMilesightSettings            MilesightSettings[] @relation("UpdatedMilesightSettings")
+  createdMilesightWebhookSettings     MilesightWebhookSettings[] @relation("CreatedMilesightWebhookSettings")
+  updatedMilesightWebhookSettings     MilesightWebhookSettings[] @relation("UpdatedMilesightWebhookSettings")
+
+  @@index([email])
+  @@index([role])
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+enum ActivityType {
+  LOGIN
+  LOGOUT
+  USER_CREATED
+  USER_UPDATED
+  USER_DELETED
+  PASSWORD_CHANGED
+  ROLE_CHANGED
+  PROFILE_UPDATED
+}
+
+model ActivityLog {
+  id          String       @id @default(cuid())
+  userId      String
+  type        ActivityType
+  description String?      @db.Text
+  metadata    String?      @db.Text // JSON string for additional data
+  createdAt   DateTime     @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+}
+
+model MilesightSettings {
+  id                    String    @id @default(cuid())
+  
+  // General info
+  name                  String    @default("Default Milesight App")
+  enabled               Boolean   @default(true)
+  
+  // Auth configuration
+  baseUrl               String    // e.g. https://demo.milesight.com
+  clientId              String
+  clientSecret          String    // encrypted/hashed in production
+  
+  // Tokens (server-side only)
+  accessToken           String?   @db.Text
+  refreshToken          String?   @db.Text
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  
+  // Track who created/updated
+  createdByUserId       String?
+  updatedByUserId       String?
+  createdByUser         User?     @relation("CreatedMilesightSettings", fields: [createdByUserId], references: [id])
+  updatedByUser         User?     @relation("UpdatedMilesightSettings", fields: [updatedByUserId], references: [id])
+
+  @@index([enabled])
+}
+
+model MilesightWebhookSettings {
+  id                String    @id @default(cuid())
+  
+  // Webhook identifiers from Milesight
+  webhookUuid       String?   // UUID provided by Milesight
+  webhookSecret     String?   // Secret provided by Milesight
+  
+  enabled           Boolean   @default(true)
+  
+  // Optional verification token for webhook security
+  verificationToken String?
+  
+  // Callback path (static but stored for reference)
+  callbackPath      String    @default("/api/webhooks/milesight")
+  
+  // Last test/health status
+  lastTestAt        DateTime?
+  lastTestStatus    String?   // "SUCCESS" | "FAILED"
+  lastError         String?   @db.Text
+  
+  // Last received event tracking
+  lastEventAt       DateTime?
+  lastEventType     String?
+  totalEventsCount  Int       @default(0)
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  // Track who created/updated
+  createdByUserId   String?
+  updatedByUserId   String?
+  createdByUser     User?     @relation("CreatedMilesightWebhookSettings", fields: [createdByUserId], references: [id])
+  updatedByUser     User?     @relation("UpdatedMilesightWebhookSettings", fields: [updatedByUserId], references: [id])
+
+  @@index([enabled])
+}
+
+model MilesightWebhookEvent {
+  id           String   @id @default(cuid())
+  
+  // Event data
+  eventType    String   // e.g. "device.online", "device.offline", "alarm.triggered"
+  deviceId     String?  // Device identifier if applicable
+  deviceName   String?
+  
+  // Full payload from Milesight
+  payload      String   @db.Text // JSON string
+  
+  // Metadata
+  processed    Boolean  @default(false)
+  processedAt  DateTime?
+  
+  createdAt    DateTime @default(now())
+  
+  @@index([eventType])
+  @@index([deviceId])
+  @@index([createdAt])
+  @@index([processed])
+}
+
+model MilesightDeviceCache {
+  id          String   @id @default(cuid())
+  
+  // Milesight device identifiers
+  deviceId    String   @unique // Milesight device ID from API
+  sn          String?  // Serial number
+  devEUI      String?  // LoRaWAN DevEUI
+  imei        String?  // For cellular devices
+  
+  // Device information
+  name        String?
+  description String?  @db.Text
+  tag         String?
+  
+  // Device status
+  lastStatus  String?  // e.g. "ONLINE", "OFFLINE"
+  deviceType  String?  // Device model/type
+  
+  // Sync tracking
+  lastSyncAt  DateTime @default(now())
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  telemetryData MilesightDeviceTelemetry[]
+  
+  @@index([deviceId])
+  @@index([sn])
+  @@index([devEUI])
+  @@index([lastStatus])
+}
+
+model MilesightDeviceTelemetry {
+  id        String   @id @default(cuid())
+  
+  // Device reference
+  deviceId  String
+  device    MilesightDeviceCache @relation(fields: [deviceId], references: [deviceId], onDelete: Cascade)
+  
+  // Event metadata
+  eventId        String   // Unique event ID from Milesight
+  eventType      String   // e.g. "DEVICE_DATA", "DEVICE_STATUS"
+  eventVersion   String?
+  
+  // Data timestamp from device
+  dataTimestamp  BigInt   // Unix timestamp in milliseconds from device
+  
+  // Data type
+  dataType       String   // e.g. "PROPERTY", "ALARM", "EVENT"
+  
+  // Sensor payload (JSON string)
+  payload        String   @db.Text // e.g. {"temperature_left": 1.9, "battery": 93}
+  
+  // Device profile at time of event
+  deviceSn       String?
+  deviceName     String?
+  deviceModel    String?
+  deviceDevEUI   String?
+  
+  // Specific sensor values (for easy querying)
+  temperature    Float?   // Generic temperature
+  humidity       Float?   // Generic humidity
+  battery        Int?     // Battery percentage
+  
+  // Additional sensor data (parsed from payload)
+  sensorData     String?  @db.Text // JSON string of all sensor values
+  
+  // Processing
+  processed      Boolean  @default(false)
+  processedAt    DateTime?
+  
+  createdAt      DateTime @default(now())
+  
+  @@index([deviceId])
+  @@index([eventId])
+  @@index([eventType])
+  @@index([dataTimestamp])
+  @@index([createdAt])
+  @@index([processed])
+}
+
