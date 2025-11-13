@@ -136,10 +136,10 @@ export function DeviceTelemetryCard({
 
   const chartData = filteredData.length > 0 ? filteredData : allData.slice(-50);
 
-  // Build dynamic chart config
+  // Build dynamic chart config (only for chart properties)
   const dynamicChartConfig: ChartConfig = React.useMemo(() => {
     const config: ChartConfig = {};
-    allProperties.forEach((prop, index) => {
+    chartProperties.forEach((prop, index) => {
       const chartIndex = (index % 5) + 1;
       config[prop] = {
         label: prop.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
@@ -147,7 +147,7 @@ export function DeviceTelemetryCard({
       };
     });
     return config;
-  }, [allProperties]);
+  }, [chartProperties]);
 
   // Get the top 2 most important properties to display
   const displayProperties = React.useMemo(() => {
@@ -274,15 +274,15 @@ export function DeviceTelemetryCard({
               })}
             </div>
 
-            {/* Interactive Area Chart - All Properties */}
-            {chartData.length > 0 ? (
+            {/* Interactive Area Chart - Temperature & Voltage Only */}
+            {chartData.length > 0 && chartProperties.length > 0 ? (
               <ChartContainer
                 config={dynamicChartConfig}
                 className="aspect-auto h-[250px] w-full"
               >
                 <AreaChart data={chartData}>
                   <defs>
-                    {allProperties.map((prop, index) => {
+                    {chartProperties.map((prop, index) => {
                       const chartIndex = (index % 5) + 1;
                       return (
                         <linearGradient
@@ -361,7 +361,7 @@ export function DeviceTelemetryCard({
                       />
                     }
                   />
-                  {allProperties.map((prop, index) => {
+                  {chartProperties.map((prop, index) => {
                     const chartIndex = (index % 5) + 1;
                     return (
                       <Area
