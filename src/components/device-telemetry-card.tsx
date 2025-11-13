@@ -148,35 +148,28 @@ export function DeviceTelemetryCard({
         return now - item.timestamp <= timeRanges[timeRange];
       });
 
-  // Sample data to always show exactly 20 bars regardless of time range
+  // ALWAYS show exactly 20 bars - sample evenly from filtered data
   const chartData = React.useMemo(() => {
-    if (filteredData.length === 0) return allData;
+    if (filteredData.length === 0) return [];
     
-    // Calculate dynamic sampling interval to get exactly 20 bars
-    const targetBars = 20;
-    const timeRangeMs = timeRange === "all" 
-      ? Number.MAX_SAFE_INTEGER 
-      : timeRanges[timeRange];
-    const samplingInterval = timeRangeMs / targetBars;
+    const TARGET_BARS = 20;
     
-    const sampled: any[] = [];
-    let lastTimestamp = 0;
-    
-    filteredData.forEach((item) => {
-      if (item.timestamp - lastTimestamp >= samplingInterval || sampled.length === 0) {
-        sampled.push(item);
-        lastTimestamp = item.timestamp;
-      }
-    });
-    
-    // If we have fewer than 20 bars and more data available, return all filtered data
-    // This handles cases where data points are sparse
-    if (sampled.length < targetBars && filteredData.length > sampled.length) {
+    // If we have 20 or fewer data points, return all of them
+    if (filteredData.length <= TARGET_BARS) {
       return filteredData;
     }
     
+    // Sample exactly 20 bars evenly distributed across the time range
+    const sampled: any[] = [];
+    const step = filteredData.length / TARGET_BARS;
+    
+    for (let i = 0; i < TARGET_BARS; i++) {
+      const index = Math.floor(i * step);
+      sampled.push(filteredData[index]);
+    }
+    
     return sampled;
-  }, [filteredData, allData, timeRange, timeRanges]);
+  }, [filteredData]);
 
   // Only show temperature_left and temperature_right in chart
   const hasTemperatureLeft = allProperties.includes("temperature_left");
@@ -205,7 +198,7 @@ export function DeviceTelemetryCard({
   }, [allProperties]);
 
   return (
-    <Card className="border-border/40 bg-card/50 shadow-sm backdrop-blur-sm">
+    <Card className="border-border/40 shadow-sm" style={{ backgroundColor: '#e0e1e2' }}>
       <CardHeader className="flex items-center gap-2 space-y-0 border-b py-4 sm:flex-row">
         <div className="grid flex-1 gap-1 text-center sm:text-left">
           <CardTitle className="flex items-center gap-2 text-sm">
@@ -215,7 +208,7 @@ export function DeviceTelemetryCard({
           <div className="flex items-center gap-2">
             <Badge
               variant={deviceStatus === "ONLINE" ? "default" : "secondary"}
-              className="h-5"
+              className="h-5 text-[8px]"
             >
               <FaCircle
                 className={`mr-1 h-2 w-2 ${
@@ -322,14 +315,22 @@ export function DeviceTelemetryCard({
                     tickLine={false}
                     tickMargin={10}
                     axisLine={false}
-                    minTickGap={60}
+                    minTickGap={30}
                     tickFormatter={(value) => {
                       try {
                         const timestamp = Number(value);
                         if (!timestamp || isNaN(timestamp)) return "";
                         const date = new Date(timestamp);
                         if (isNaN(date.getTime())) return "";
-                        return format(date, "HH:mm");
+                        
+                        // Format based on time range selected
+                        if (timeRange === "1h" || timeRange === "6h") {
+                          return format(date, "HH:mm"); // Show time for short ranges
+                        } else if (timeRange === "24h") {
+                          return format(date, "HH:mm"); // Show time for 24h
+                        } else {
+                          return format(date, "MM/dd HH:mm"); // Show date+time for 7d or all
+                        }
                       } catch (error) {
                         return "";
                       }
