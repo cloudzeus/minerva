@@ -131,15 +131,28 @@ export async function POST(request: NextRequest) {
         if (eventType === "DEVICE_DATA" && eventData && deviceId) {
           console.log("📊 Processing telemetry data...");
           
-          // Check if device exists in cache - ONLY process known devices
+          // Check if device exists in cache - Match by SERIAL NUMBER
           console.log("🔍 Checking if device exists in cache...");
-          const existingDevice = await prisma.milesightDeviceCache.findUnique({
-            where: { deviceId },
-          });
+          console.log("  - Looking for SN:", deviceSn);
+          console.log("  - Looking for deviceId:", deviceId);
+          
+          // Try to find by serial number first (more reliable)
+          let existingDevice = deviceSn
+            ? await prisma.milesightDeviceCache.findFirst({
+                where: { sn: deviceSn },
+              })
+            : null;
+
+          // Fallback to deviceId if SN lookup failed
+          if (!existingDevice && deviceId) {
+            existingDevice = await prisma.milesightDeviceCache.findUnique({
+              where: { deviceId },
+            });
+          }
 
           if (!existingDevice) {
             console.warn(
-              `⚠️ Device ${deviceId} (${deviceName}) not registered in system. Skipping telemetry.`
+              `⚠️ Device SN:${deviceSn} ID:${deviceId} (${deviceName}) not registered in system. Skipping telemetry.`
             );
             console.warn(
               "   To receive data from this device, add it via Admin → Devices → Milesight Devices"
@@ -148,11 +161,17 @@ export async function POST(request: NextRequest) {
             continue;
           }
           
-          console.log("✅ Device found in cache:", existingDevice.name);
+          console.log("✅ Device found in cache:");
+          console.log("  - DB Record ID:", existingDevice.id);
+          console.log("  - DB deviceId:", existingDevice.deviceId);
+          console.log("  - DB SN:", existingDevice.sn);
+          console.log("  - Name:", existingDevice.name);
           
-          // Update device info from webhook
+          // Update device info from webhook (use the DB deviceId for consistency)
+          const actualDeviceId = existingDevice.deviceId;
+          
           await prisma.milesightDeviceCache.update({
-            where: { deviceId },
+            where: { id: existingDevice.id },
             data: {
               name: deviceName || undefined,
               sn: deviceSn || undefined,
@@ -184,9 +203,10 @@ export async function POST(request: NextRequest) {
           });
 
           console.log("Creating telemetry record...");
+          console.log("  - Using deviceId:", actualDeviceId);
           const telemetryRecord = await prisma.milesightDeviceTelemetry.create({
             data: {
-              deviceId,
+              deviceId: actualDeviceId,
               eventId: eventId || `evt-${Date.now()}`,
               eventType,
               eventVersion: payload.eventVersion,
@@ -213,7 +233,7 @@ export async function POST(request: NextRequest) {
             type: "new_telemetry",
             timestamp: Date.now(),
             data: {
-              deviceId,
+              deviceId: actualDeviceId,
               deviceName,
               eventType,
               temperature: temperature ? parseFloat(temperature) : null,
