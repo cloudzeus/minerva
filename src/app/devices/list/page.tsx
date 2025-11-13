@@ -20,7 +20,7 @@ export default async function DeviceListPage() {
   const devices = await getAllDevices();
 
   return (
-    <DashboardLayout requiredRole={Role.EMPLOYEE}>
+    <DashboardLayout requiredRole={[Role.EMPLOYEE, Role.MANAGER, Role.ADMIN]}>
       <div className="flex flex-1 flex-col gap-4 p-4 md:gap-6 md:p-6">
         <div>
           <h1 className="text-xl font-bold tracking-tight">Device List</h1>

@@ -109,7 +109,7 @@ export default async function DeviceDetailPage({
     device.deviceType?.toUpperCase().includes("UG");
 
   return (
-    <DashboardLayout requiredRole={Role.EMPLOYEE}>
+    <DashboardLayout requiredRole={[Role.EMPLOYEE, Role.MANAGER, Role.ADMIN]}>
       <div className="flex flex-1 flex-col gap-4 p-4 md:gap-6 md:p-6">
         {/* Header */}
         <div className="flex items-center justify-between">
