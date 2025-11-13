@@ -1,23 +1,25 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { FaMicrochip, FaThermometerHalf, FaTint, FaBatteryHalf } from "react-icons/fa";
+import { FaMicrochip, FaThermometerHalf, FaServer, FaCheckCircle } from "react-icons/fa";
 
 interface DeviceStatsCardsProps {
   totalDevices: number;
   onlineDevices: number;
   avgTemperature: number | null;
-  avgHumidity: number | null;
-  avgBattery: number | null;
+  totalGateways: number;
+  onlineGateways: number;
 }
 
 export function DeviceStatsCards({
   totalDevices,
   onlineDevices,
   avgTemperature,
-  avgHumidity,
-  avgBattery,
+  totalGateways,
+  onlineGateways,
 }: DeviceStatsCardsProps) {
+  const gatewayPercentage = totalGateways > 0 ? Math.round((onlineGateways / totalGateways) * 100) : 0;
+  
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
       {/* Total Devices */}
       <Card className="border-border/40 bg-card/50 shadow-sm backdrop-blur-sm transition-all hover:shadow-md">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -66,38 +68,23 @@ export function DeviceStatsCards({
         </CardContent>
       </Card>
 
-      {/* Average Humidity */}
+      {/* UG65 Gateway Status */}
       <Card className="border-border/40 bg-card/50 shadow-sm backdrop-blur-sm transition-all hover:shadow-md">
         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
           <CardTitle className="text-xs font-medium text-muted-foreground">
-            Avg Humidity
+            UG65 Gateways
           </CardTitle>
-          <FaTint className="h-3.5 w-3.5 text-blue-600" />
+          <FaServer className="h-3.5 w-3.5 text-blue-600" />
         </CardHeader>
         <CardContent>
-          <div className="text-xl font-bold">
-            {avgHumidity !== null ? `${avgHumidity.toFixed(1)}%` : "—"}
-          </div>
-          <p className="mt-1 text-xs text-muted-foreground">Latest readings</p>
-        </CardContent>
-      </Card>
-
-      {/* Average Battery */}
-      <Card className="border-border/40 bg-card/50 shadow-sm backdrop-blur-sm transition-all hover:shadow-md">
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <CardTitle className="text-xs font-medium text-muted-foreground">
-            Avg Battery
-          </CardTitle>
-          <FaBatteryHalf className="h-3.5 w-3.5 text-green-600" />
-        </CardHeader>
-        <CardContent>
-          <div className="text-xl font-bold">
-            {avgBattery !== null ? `${Math.round(avgBattery)}%` : "—"}
+          <div className="text-xl font-bold flex items-center gap-2">
+            {gatewayPercentage}%
+            {gatewayPercentage === 100 && totalGateways > 0 && (
+              <FaCheckCircle className="h-4 w-4 text-green-500" />
+            )}
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
-            {avgBattery !== null && avgBattery < 20
-              ? "Low battery!"
-              : "All devices"}
+            {onlineGateways} / {totalGateways} online
           </p>
         </CardContent>
       </Card>

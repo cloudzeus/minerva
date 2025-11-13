@@ -9,24 +9,24 @@ interface RealtimeStatsCardsProps {
   initialTotalDevices: number;
   initialOnlineDevices: number;
   initialAvgTemperature: number | null;
-  initialAvgHumidity: number | null;
-  initialAvgBattery: number | null;
+  initialTotalGateways: number;
+  initialOnlineGateways: number;
 }
 
 export function RealtimeStatsCards({
   initialTotalDevices,
   initialOnlineDevices,
   initialAvgTemperature,
-  initialAvgHumidity,
-  initialAvgBattery,
+  initialTotalGateways,
+  initialOnlineGateways,
 }: RealtimeStatsCardsProps) {
   const router = useRouter();
   const [stats, setStats] = useState({
     totalDevices: initialTotalDevices,
     onlineDevices: initialOnlineDevices,
     avgTemperature: initialAvgTemperature,
-    avgHumidity: initialAvgHumidity,
-    avgBattery: initialAvgBattery,
+    totalGateways: initialTotalGateways,
+    onlineGateways: initialOnlineGateways,
   });
 
   // Listen for new telemetry - refresh stats
@@ -49,8 +49,8 @@ export function RealtimeStatsCards({
       totalDevices={stats.totalDevices}
       onlineDevices={stats.onlineDevices}
       avgTemperature={stats.avgTemperature}
-      avgHumidity={stats.avgHumidity}
-      avgBattery={stats.avgBattery}
+      totalGateways={stats.totalGateways}
+      onlineGateways={stats.onlineGateways}
     />
   );
 }

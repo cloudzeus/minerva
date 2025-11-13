@@ -18,6 +18,8 @@ async function getDashboardStats() {
     employeeCount,
     totalDevices,
     onlineDevices,
+    totalGateways,
+    onlineGateways,
     recentTelemetry,
     devices,
   ] = await Promise.all([
@@ -27,6 +29,8 @@ async function getDashboardStats() {
     prisma.user.count({ where: { role: Role.EMPLOYEE } }),
     prisma.milesightDeviceCache.count(),
     prisma.milesightDeviceCache.count({ where: { lastStatus: "ONLINE" } }),
+    prisma.milesightDeviceCache.count({ where: { deviceType: "UG65" } }),
+    prisma.milesightDeviceCache.count({ where: { deviceType: "UG65", lastStatus: "ONLINE" } }),
     prisma.milesightDeviceTelemetry.findMany({
       take: 2000, // Increased to fetch more history
       orderBy: { dataTimestamp: "desc" },
@@ -53,22 +57,6 @@ async function getDashboardStats() {
         latestReadings.filter((t) => t.temperature !== null).length
       : null;
 
-  const avgHumidity =
-    latestReadings.filter((t) => t.humidity !== null).length > 0
-      ? latestReadings
-          .filter((t) => t.humidity !== null)
-          .reduce((sum, t) => sum + (t.humidity || 0), 0) /
-        latestReadings.filter((t) => t.humidity !== null).length
-      : null;
-
-  const avgBattery =
-    latestReadings.filter((t) => t.battery !== null).length > 0
-      ? latestReadings
-          .filter((t) => t.battery !== null)
-          .reduce((sum, t) => sum + (t.battery || 0), 0) /
-        latestReadings.filter((t) => t.battery !== null).length
-      : null;
-
   // Group telemetry by device
   const telemetryByDevice = new Map<string, typeof recentTelemetry>();
   recentTelemetry.forEach((t) => {
@@ -86,8 +74,8 @@ async function getDashboardStats() {
     totalDevices,
     onlineDevices,
     avgTemperature,
-    avgHumidity,
-    avgBattery,
+    totalGateways,
+    onlineGateways,
     devices,
     telemetryByDevice,
   };
@@ -148,8 +136,8 @@ export default async function AdminDashboard() {
           initialTotalDevices={stats.totalDevices}
           initialOnlineDevices={stats.onlineDevices}
           initialAvgTemperature={stats.avgTemperature}
-          initialAvgHumidity={stats.avgHumidity}
-          initialAvgBattery={stats.avgBattery}
+          initialTotalGateways={stats.totalGateways}
+          initialOnlineGateways={stats.onlineGateways}
         />
 
         {/* Device Telemetry Cards - Individual per Device */}
