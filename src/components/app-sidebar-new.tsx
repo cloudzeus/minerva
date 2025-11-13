@@ -21,6 +21,8 @@ import {
   FaKey,
   FaWifi,
   FaMicrochip,
+  FaDatabase,
+  FaList,
 } from "react-icons/fa";
 import { Button } from "@/components/ui/button";
 
@@ -107,6 +109,19 @@ export function AppSidebarNew({ role, currentPath }: AppSidebarProps) {
           ],
         },
         {
+          label: "Device Data",
+          icon: FaDatabase,
+          iconColor: "text-cyan-500",
+          links: [
+            {
+              href: "/devices/list",
+              label: "Device List",
+              icon: FaList,
+              iconColor: "text-cyan-500",
+            },
+          ],
+        },
+        {
           label: "Settings",
           icon: FaCog,
           iconColor: "text-orange-500",
@@ -163,6 +178,19 @@ export function AppSidebarNew({ role, currentPath }: AppSidebarProps) {
             },
           ],
         },
+        {
+          label: "Device Data",
+          icon: FaDatabase,
+          iconColor: "text-cyan-500",
+          links: [
+            {
+              href: "/devices/list",
+              label: "Device List",
+              icon: FaList,
+              iconColor: "text-cyan-500",
+            },
+          ],
+        },
       ],
     },
     [Role.EMPLOYEE]: {
@@ -191,6 +219,19 @@ export function AppSidebarNew({ role, currentPath }: AppSidebarProps) {
               label: "My Activity",
               icon: FaClipboardList,
               iconColor: "text-purple-500",
+            },
+          ],
+        },
+        {
+          label: "Device Data",
+          icon: FaDatabase,
+          iconColor: "text-cyan-500",
+          links: [
+            {
+              href: "/devices/list",
+              label: "Device List",
+              icon: FaList,
+              iconColor: "text-cyan-500",
             },
           ],
         },
