@@ -66,14 +66,12 @@ export async function sendTemperatureAlertEmail(alert: TemperatureAlertEmail) {
     const response = await apiInstance.sendTransacEmail(sendSmtpEmail);
 
     console.log("[Email Service] ✅ Email sent successfully via Brevo:", {
-      messageId: response.messageId,
       recipients: alert.recipients.length,
     });
 
     return {
       success: true,
       emailsSent: alert.recipients.length,
-      messageId: response.messageId,
     };
   } catch (error: any) {
     console.error("[Email Service] Failed to send alert via Brevo:", error);
@@ -90,74 +88,190 @@ export async function sendTemperatureAlertEmail(alert: TemperatureAlertEmail) {
 function generateEmailBody(alert: TemperatureAlertEmail): string {
   const isMinAlert = alert.alertType === "MIN";
   const alertColor = isMinAlert ? "#3b82f6" : "#ef4444"; // Blue for cold, Red for hot
+  const alertBgColor = isMinAlert ? "#eff6ff" : "#fef2f2"; // Light blue/red background
   const alertIcon = isMinAlert ? "❄️" : "🔥";
+  const alertTitle = isMinAlert ? "Temperature Too Low" : "Temperature Too High";
+  const alertMessage = isMinAlert 
+    ? "The temperature has dropped below the minimum threshold." 
+    : "The temperature has exceeded the maximum threshold.";
+
+  // Calculate how much the temperature is out of range
+  const difference = isMinAlert 
+    ? (alert.minThreshold - alert.currentTemperature).toFixed(1)
+    : (alert.currentTemperature - alert.maxThreshold).toFixed(1);
 
   return `
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Temperature Alert</title>
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>Temperature Alert - ${alert.deviceName}</title>
+  <style>
+    @media only screen and (max-width: 600px) {
+      .email-container {
+        width: 100% !important;
+        padding: 10px !important;
+      }
+      .temperature-value {
+        font-size: 32px !important;
+      }
+    }
+  </style>
 </head>
-<body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
-  <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 30px; border-radius: 10px 10px 0 0; text-align: center;">
-    <h1 style="color: white; margin: 0; font-size: 24px;">
-      ${alertIcon} Temperature Alert
-    </h1>
-    <p style="color: rgba(255,255,255,0.9); margin: 10px 0 0 0; font-size: 14px;">
-      MINERVA Device Monitoring System
-    </p>
-  </div>
+<body style="margin: 0; padding: 0; background-color: #f3f4f6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+  <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f3f4f6; padding: 20px 0;">
+    <tr>
+      <td align="center">
+        <!-- Main Container -->
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" class="email-container" style="max-width: 600px; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+          
+          <!-- Header with Gradient -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 40px 30px; text-align: center;">
+              <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.5px;">
+                ${alertIcon} Temperature Alert
+              </h1>
+              <p style="color: rgba(255, 255, 255, 0.95); margin: 8px 0 0 0; font-size: 15px; font-weight: 500;">
+                MINERVA Device Monitoring System
+              </p>
+            </td>
+          </tr>
 
-  <div style="background: white; padding: 30px; border: 1px solid #e2e8f0; border-top: none; border-radius: 0 0 10px 10px;">
-    <div style="background: #fef2f2; border-left: 4px solid ${alertColor}; padding: 15px; margin-bottom: 20px; border-radius: 4px;">
-      <p style="margin: 0; font-size: 16px; font-weight: bold; color: ${alertColor};">
-        ⚠️ Temperature ${isMinAlert ? "Too Low" : "Too High"}
-      </p>
-    </div>
+          <!-- Alert Banner -->
+          <tr>
+            <td style="padding: 0;">
+              <div style="background-color: ${alertBgColor}; border-left: 5px solid ${alertColor}; padding: 20px 30px; margin: 0;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                  <tr>
+                    <td style="vertical-align: middle;">
+                      <p style="margin: 0; font-size: 18px; font-weight: 700; color: ${alertColor}; line-height: 1.4;">
+                        ⚠️ ${alertTitle}
+                      </p>
+                      <p style="margin: 8px 0 0 0; font-size: 14px; color: #6b7280; line-height: 1.5;">
+                        ${alertMessage}
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+              </div>
+            </td>
+          </tr>
 
-    <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
-      <tr style="border-bottom: 1px solid #e2e8f0;">
-        <td style="padding: 12px 0; font-weight: bold; color: #64748b;">Device:</td>
-        <td style="padding: 12px 0;">${alert.deviceName}</td>
-      </tr>
-      <tr style="border-bottom: 1px solid #e2e8f0;">
-        <td style="padding: 12px 0; font-weight: bold; color: #64748b;">Device ID:</td>
-        <td style="padding: 12px 0; font-family: monospace; font-size: 12px;">${alert.deviceId}</td>
-      </tr>
-      <tr style="border-bottom: 1px solid #e2e8f0;">
-        <td style="padding: 12px 0; font-weight: bold; color: #64748b;">Current Temperature:</td>
-        <td style="padding: 12px 0; font-size: 20px; font-weight: bold; color: ${alertColor};">
-          ${alert.currentTemperature.toFixed(1)}°C
-        </td>
-      </tr>
-      <tr style="border-bottom: 1px solid #e2e8f0;">
-        <td style="padding: 12px 0; font-weight: bold; color: #64748b;">Threshold Range:</td>
-        <td style="padding: 12px 0;">
-          ${alert.minThreshold.toFixed(1)}°C - ${alert.maxThreshold.toFixed(1)}°C
-        </td>
-      </tr>
-      <tr>
-        <td style="padding: 12px 0; font-weight: bold; color: #64748b;">Time:</td>
-        <td style="padding: 12px 0;">${alert.timestamp.toLocaleString()}</td>
-      </tr>
-    </table>
+          <!-- Temperature Display - Large and Prominent -->
+          <tr>
+            <td style="padding: 30px 30px 20px 30px; text-align: center;">
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                <tr>
+                  <td style="background-color: #f9fafb; border-radius: 10px; padding: 30px; border: 2px solid ${alertColor};">
+                    <p style="margin: 0 0 10px 0; font-size: 14px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px;">
+                      Current Temperature
+                    </p>
+                    <p class="temperature-value" style="margin: 0; font-size: 48px; font-weight: 800; color: ${alertColor}; line-height: 1;">
+                      ${alert.currentTemperature.toFixed(1)}°C
+                    </p>
+                    <p style="margin: 15px 0 0 0; font-size: 14px; color: #9ca3af;">
+                      ${difference}°C ${isMinAlert ? "below" : "above"} threshold
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
 
-    <div style="background: #f8fafc; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-      <p style="margin: 0; font-size: 13px; color: #64748b;">
-        💡 <strong>Action Required:</strong> Please check the device and take appropriate action if necessary.
-      </p>
-    </div>
+          <!-- Device Information Table -->
+          <tr>
+            <td style="padding: 0 30px 30px 30px;">
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="border-collapse: separate; border-spacing: 0;">
+                <tr>
+                  <td colspan="2" style="padding: 0 0 15px 0;">
+                    <p style="margin: 0; font-size: 16px; font-weight: 700; color: #111827;">
+                      Device Information
+                    </p>
+                  </td>
+                </tr>
+                <tr style="border-bottom: 1px solid #e5e7eb;">
+                  <td style="padding: 14px 0; font-weight: 600; color: #6b7280; font-size: 14px; width: 40%;">
+                    Device Name
+                  </td>
+                  <td style="padding: 14px 0; color: #111827; font-size: 14px; font-weight: 500;">
+                    ${alert.deviceName}
+                  </td>
+                </tr>
+                <tr style="border-bottom: 1px solid #e5e7eb;">
+                  <td style="padding: 14px 0; font-weight: 600; color: #6b7280; font-size: 14px;">
+                    Device ID
+                  </td>
+                  <td style="padding: 14px 0; color: #111827; font-size: 13px; font-family: 'Courier New', monospace;">
+                    ${alert.deviceId}
+                  </td>
+                </tr>
+                <tr style="border-bottom: 1px solid #e5e7eb;">
+                  <td style="padding: 14px 0; font-weight: 600; color: #6b7280; font-size: 14px;">
+                    Allowed Range
+                  </td>
+                  <td style="padding: 14px 0; color: #111827; font-size: 14px; font-weight: 500;">
+                    ${alert.minThreshold.toFixed(1)}°C — ${alert.maxThreshold.toFixed(1)}°C
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 14px 0; font-weight: 600; color: #6b7280; font-size: 14px;">
+                    Alert Time
+                  </td>
+                  <td style="padding: 14px 0; color: #111827; font-size: 14px;">
+                    ${alert.timestamp.toLocaleString('en-US', { 
+                      weekday: 'short',
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit'
+                    })}
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
 
-    <div style="text-align: center; padding-top: 20px; border-top: 1px solid #e2e8f0;">
-      <p style="margin: 0; font-size: 12px; color: #94a3b8;">
-        This is an automated alert from MINERVA Device Monitoring System.
-        <br>
-        To manage alert settings, log in to your dashboard.
-      </p>
-    </div>
-  </div>
+          <!-- Action Required Box -->
+          <tr>
+            <td style="padding: 0 30px 30px 30px;">
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                <tr>
+                  <td style="background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%); border-radius: 8px; padding: 20px; border-left: 4px solid #f59e0b;">
+                    <p style="margin: 0 0 8px 0; font-size: 14px; font-weight: 700; color: #92400e;">
+                      💡 Action Required
+                    </p>
+                    <p style="margin: 0; font-size: 13px; color: #78350f; line-height: 1.6;">
+                      Please investigate this device immediately and take appropriate corrective action. Check the device location, environmental conditions, and ensure proper operation.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 25px 30px; background-color: #f9fafb; border-top: 1px solid #e5e7eb;">
+              <p style="margin: 0 0 8px 0; font-size: 12px; color: #9ca3af; text-align: center; line-height: 1.5;">
+                This is an automated alert from <strong>MINERVA Device Monitoring System</strong>
+              </p>
+              <p style="margin: 0; font-size: 12px; color: #9ca3af; text-align: center; line-height: 1.5;">
+                To manage alert settings or view device details, please log in to your dashboard.
+              </p>
+              <p style="margin: 15px 0 0 0; font-size: 11px; color: #d1d5db; text-align: center;">
+                © ${new Date().getFullYear()} MINERVA. All rights reserved.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
 </body>
 </html>
   `.trim();
