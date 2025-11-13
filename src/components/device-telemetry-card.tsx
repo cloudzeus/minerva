@@ -292,14 +292,21 @@ export function DeviceTelemetryCard({
                 config={dynamicChartConfig}
                 className="aspect-auto h-[250px] w-full"
               >
-                <AreaChart data={chartData}>
+                <AreaChart
+                  accessibilityLayer
+                  data={chartData}
+                  margin={{
+                    left: 12,
+                    right: 12,
+                  }}
+                >
                   <defs>
                     {chartProperties.map((prop, index) => {
                       const chartIndex = (index % 5) + 1;
                       return (
                         <linearGradient
                           key={prop}
-                          id={`fill-${prop}-${deviceId}`}
+                          id={`fill${prop}`}
                           x1="0"
                           y1="0"
                           x2="0"
@@ -337,41 +344,10 @@ export function DeviceTelemetryCard({
                         return "";
                       }
                     }}
-                    style={{ fontSize: "0.65rem" }}
-                  />
-                  <YAxis
-                    tickLine={false}
-                    axisLine={false}
-                    style={{ fontSize: "0.65rem" }}
                   />
                   <ChartTooltip
                     cursor={false}
-                    content={
-                      <ChartTooltipContent
-                        labelFormatter={(value) => {
-                          try {
-                            const timestamp = Number(value);
-                            if (!timestamp || isNaN(timestamp)) {
-                              return "Invalid date";
-                            }
-                            const date = new Date(timestamp);
-                            if (isNaN(date.getTime())) {
-                              return "Invalid date";
-                            }
-                            return format(date, "PPpp");
-                          } catch (error) {
-                            console.error("Date format error:", error);
-                            return "Invalid date";
-                          }
-                        }}
-                        indicator="dot"
-                        formatter={(value, name) => {
-                          const prop = name as string;
-                          const unit = propertyIcons[prop]?.unit || "";
-                          return [`${Number(value).toFixed(1)}${unit}`, dynamicChartConfig[prop]?.label || name];
-                        }}
-                      />
-                    }
+                    content={<ChartTooltipContent indicator="line" />}
                   />
                   {chartProperties.map((prop, index) => {
                     const chartIndex = (index % 5) + 1;
@@ -380,7 +356,8 @@ export function DeviceTelemetryCard({
                         key={prop}
                         dataKey={prop}
                         type="natural"
-                        fill={`url(#fill-${prop}-${deviceId})`}
+                        fill={`url(#fill${prop})`}
+                        fillOpacity={0.4}
                         stroke={`hsl(var(--chart-${chartIndex}))`}
                         stackId="a"
                       />
