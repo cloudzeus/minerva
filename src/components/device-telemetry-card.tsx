@@ -176,10 +176,10 @@ export function DeviceTelemetryCard({
 
   return (
     <Card className="border-border/40 bg-card/50 shadow-sm backdrop-blur-sm">
-      <CardHeader className="flex items-center gap-2 space-y-0 border-b py-5 sm:flex-row">
+      <CardHeader className="flex items-center gap-2 space-y-0 border-b py-4 sm:flex-row">
         <div className="grid flex-1 gap-1 text-center sm:text-left">
-          <CardTitle className="flex items-center gap-2">
-            <FaMicrochip className="h-4 w-4 text-muted-foreground" />
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <FaMicrochip className="h-3.5 w-3.5 text-muted-foreground" />
             {deviceName || `Device ${deviceId}`}
           </CardTitle>
           <div className="flex items-center gap-2">
@@ -204,23 +204,23 @@ export function DeviceTelemetryCard({
           />
           <Select value={timeRange} onValueChange={setTimeRange}>
             <SelectTrigger
-              className="w-[160px] rounded-lg sm:ml-auto"
+              className="w-[140px] text-xs rounded-lg sm:ml-auto"
               aria-label="Select a value"
             >
-              <SelectValue placeholder="Last 24 hours" />
+              <SelectValue placeholder="Last 24h" />
             </SelectTrigger>
             <SelectContent className="rounded-xl">
-              <SelectItem value="1h" className="rounded-lg">
-                Last 1 hour
+              <SelectItem value="1h" className="rounded-lg text-xs">
+                1h
               </SelectItem>
-              <SelectItem value="6h" className="rounded-lg">
-                Last 6 hours
+              <SelectItem value="6h" className="rounded-lg text-xs">
+                6h
               </SelectItem>
-              <SelectItem value="24h" className="rounded-lg">
-                Last 24 hours
+              <SelectItem value="24h" className="rounded-lg text-xs">
+                24h
               </SelectItem>
-              <SelectItem value="7d" className="rounded-lg">
-                Last 7 days
+              <SelectItem value="7d" className="rounded-lg text-xs">
+                7d
               </SelectItem>
             </SelectContent>
           </Select>
@@ -262,12 +262,12 @@ export function DeviceTelemetryCard({
                     className="flex flex-col rounded-lg border border-border/40 bg-muted/50 p-3"
                   >
                     <div className="flex items-center gap-2">
-                      <Icon className={`h-4 w-4 ${config.color}`} />
+                      <Icon className={`h-3 w-3 ${config.color}`} />
                       <span className="text-xs font-medium text-muted-foreground">
                         {prop.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
                       </span>
                     </div>
-                    <div className="mt-2 text-2xl font-bold">
+                      <div className="mt-1 text-lg font-bold">
                       {value !== null && value !== undefined
                         ? `${typeof value === "number" ? value.toFixed(1) : value}${config.unit || ""}`
                         : "—"}

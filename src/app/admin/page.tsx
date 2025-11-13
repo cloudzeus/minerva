@@ -99,8 +99,8 @@ export default async function AdminDashboard() {
       <div className="flex flex-1 flex-col gap-4 p-4 md:gap-6 md:p-6">
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Admin Dashboard</h1>
-            <p className="text-muted-foreground mt-2 text-sm">
+            <h1 className="text-xl font-bold tracking-tight">Admin Dashboard</h1>
+            <p className="text-muted-foreground text-xs">
               Manage users, devices, and monitor system activity
             </p>
           </div>
