@@ -66,19 +66,28 @@ export async function POST(request: NextRequest) {
     const rawPayload = await request.json();
     const payloads = Array.isArray(rawPayload) ? rawPayload : [rawPayload];
 
+    console.log("=".repeat(80));
     console.log("[Milesight Webhook] Received", payloads.length, "event(s)");
+    console.log("[Milesight Webhook] Raw payload:", JSON.stringify(rawPayload, null, 2));
+    console.log("=".repeat(80));
 
     let eventsProcessed = 0;
 
     for (const payload of payloads) {
       try {
+        console.log("\n--- Processing Event ---");
+        console.log("Payload:", JSON.stringify(payload, null, 2));
+        
         // Milesight sends events directly (not wrapped in webhookPushEvent)
         const eventType = payload.eventType || "unknown";
         const eventId = payload.eventId;
         const eventData = payload.data;
 
+        console.log("Event Type:", eventType);
+        console.log("Event ID:", eventId);
+
         if (!eventData) {
-          console.warn("[Milesight Webhook] No data in payload:", payload);
+          console.warn("[Milesight Webhook] ❌ No data in payload");
           continue;
         }
 
@@ -90,8 +99,19 @@ export async function POST(request: NextRequest) {
         const deviceModel = deviceProfile?.model;
         const deviceDevEUI = deviceProfile?.devEUI;
 
+        console.log("Device Profile:", {
+          deviceId,
+          deviceName,
+          deviceSn,
+          deviceModel,
+          deviceDevEUI,
+        });
+        console.log("Data Type:", eventData.type);
+        console.log("Data Payload:", eventData.payload);
+
         // Store general webhook event
-        await prisma.milesightWebhookEvent.create({
+        console.log("✅ Storing webhook event...");
+        const webhookEvent = await prisma.milesightWebhookEvent.create({
           data: {
             eventType,
             deviceId,
@@ -100,10 +120,19 @@ export async function POST(request: NextRequest) {
             processed: false,
           },
         });
+        console.log("✅ Webhook event stored:", webhookEvent.id);
 
         // If it's device data, store telemetry
+        console.log("Checking if should store telemetry:");
+        console.log("  - eventType === 'DEVICE_DATA'?", eventType === "DEVICE_DATA");
+        console.log("  - eventData exists?", !!eventData);
+        console.log("  - deviceId exists?", !!deviceId);
+        
         if (eventType === "DEVICE_DATA" && eventData && deviceId) {
+          console.log("📊 Processing telemetry data...");
           const dataPayload = eventData.payload || {};
+          console.log("Data Payload Keys:", Object.keys(dataPayload));
+          console.log("Full Data Payload:", JSON.stringify(dataPayload, null, 2));
           
           // Extract common sensor values
           const temperature =
@@ -114,7 +143,14 @@ export async function POST(request: NextRequest) {
           const humidity = dataPayload.humidity || null;
           const battery = dataPayload.battery || null;
 
-          await prisma.milesightDeviceTelemetry.create({
+          console.log("Extracted Values:", {
+            temperature,
+            humidity,
+            battery,
+          });
+
+          console.log("Creating telemetry record...");
+          const telemetryRecord = await prisma.milesightDeviceTelemetry.create({
             data: {
               deviceId,
               eventId: eventId || `evt-${Date.now()}`,
@@ -135,10 +171,11 @@ export async function POST(request: NextRequest) {
             },
           });
 
-          console.log("[Milesight Webhook] Stored telemetry for device:", deviceId);
+          console.log("✅ Telemetry record created:", telemetryRecord.id);
+          console.log("[Milesight Webhook] ✅ Stored telemetry for device:", deviceId);
 
           // Broadcast real-time event to all connected clients
-          broadcastToClients({
+          const broadcastData = {
             type: "new_telemetry",
             timestamp: Date.now(),
             data: {
@@ -149,15 +186,26 @@ export async function POST(request: NextRequest) {
               humidity: humidity ? parseFloat(humidity) : null,
               battery: battery ? parseInt(battery) : null,
             },
-          });
+          };
+          console.log("📡 Broadcasting to SSE clients:", broadcastData);
+          broadcastToClients(broadcastData);
+        } else {
+          console.log("⚠️ Skipping telemetry storage (not DEVICE_DATA or missing data)");
         }
 
         eventsProcessed++;
+        console.log("✅ Event processed successfully");
+        console.log("--- End Event ---\n");
       } catch (eventError: any) {
-        console.error("[Milesight Webhook] Error processing event:", eventError);
+        console.error("❌ [Milesight Webhook] Error processing event:", eventError);
+        console.error("Error stack:", eventError.stack);
         // Continue processing other events
       }
     }
+
+    console.log("=".repeat(80));
+    console.log(`[Milesight Webhook] ✅ Processed ${eventsProcessed} event(s) successfully`);
+    console.log("=".repeat(80));
 
     // Update webhook settings with last event info
     if (eventsProcessed > 0) {
