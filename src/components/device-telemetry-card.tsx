@@ -299,52 +299,22 @@ export function DeviceTelemetryCard({
 
             {/* Interactive Area Chart - Temperature & Voltage Only */}
             {chartData.length > 0 && chartProperties.length > 0 ? (
-              <ChartContainer
-                config={dynamicChartConfig}
-                className="aspect-auto h-[300px] w-full"
-              >
+              <ChartContainer config={dynamicChartConfig}>
                 <AreaChart
+                  accessibilityLayer
                   data={chartData}
                   margin={{
-                    top: 10,
-                    right: 12,
                     left: 12,
-                    bottom: 0,
+                    right: 12,
                   }}
                 >
-                  <defs>
-                    {chartProperties.map((prop, index) => {
-                      const chartIndex = (index % 5) + 1;
-                      return (
-                        <linearGradient
-                          key={prop}
-                          id={`gradient-${prop}-${deviceId}`}
-                          x1="0"
-                          y1="0"
-                          x2="0"
-                          y2="1"
-                        >
-                          <stop
-                            offset="0%"
-                            stopColor={`hsl(var(--chart-${chartIndex}))`}
-                            stopOpacity={0.3}
-                          />
-                          <stop
-                            offset="100%"
-                            stopColor={`hsl(var(--chart-${chartIndex}))`}
-                            stopOpacity={0}
-                          />
-                        </linearGradient>
-                      );
-                    })}
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <CartesianGrid vertical={false} />
                   <XAxis
                     dataKey="timestamp"
                     tickLine={false}
                     axisLine={false}
                     tickMargin={8}
-                    minTickGap={50}
+                    minTickGap={32}
                     tickFormatter={(value) => {
                       try {
                         const timestamp = Number(value);
@@ -357,16 +327,10 @@ export function DeviceTelemetryCard({
                       }
                     }}
                   />
-                  <YAxis
-                    tickLine={false}
-                    axisLine={false}
-                    tickMargin={8}
-                    tickFormatter={(value) => `${value}`}
-                  />
                   <ChartTooltip
+                    cursor={false}
                     content={
                       <ChartTooltipContent
-                        className="w-[200px]"
                         labelFormatter={(value) => {
                           try {
                             const timestamp = Number(value);
@@ -387,11 +351,11 @@ export function DeviceTelemetryCard({
                       <Area
                         key={prop}
                         dataKey={prop}
-                        type="monotone"
+                        type="natural"
+                        fill={`hsl(var(--chart-${chartIndex}))`}
+                        fillOpacity={0.4}
                         stroke={`hsl(var(--chart-${chartIndex}))`}
-                        strokeWidth={2}
-                        fill={`url(#gradient-${prop}-${deviceId})`}
-                        fillOpacity={1}
+                        stackId="a"
                       />
                     );
                   })}
