@@ -69,7 +69,7 @@ export function DeviceTelemetryCard({
   deviceModel,
   telemetryData,
 }: DeviceTelemetryCardProps) {
-  const [timeRange, setTimeRange] = React.useState("24h");
+  const [timeRange, setTimeRange] = React.useState("all");
 
   // Get latest reading - safely handle empty array
   const latestReading = telemetryData.length > 0 ? telemetryData[0] : null;
@@ -128,13 +128,16 @@ export function DeviceTelemetryCard({
     "6h": 6 * 60 * 60 * 1000,
     "24h": 24 * 60 * 60 * 1000,
     "7d": 7 * 24 * 60 * 60 * 1000,
+    "all": Number.MAX_SAFE_INTEGER, // Show all data
   };
   
-  const filteredData = allData.filter((item) => {
-    return now - item.timestamp <= timeRanges[timeRange];
-  });
+  const filteredData = timeRange === "all" 
+    ? allData 
+    : allData.filter((item) => {
+        return now - item.timestamp <= timeRanges[timeRange];
+      });
 
-  const chartData = filteredData.length > 0 ? filteredData : allData.slice(-50);
+  const chartData = filteredData.length > 0 ? filteredData : allData;
 
   // Properties to show in chart (exclude battery and other percentage-based values)
   const chartProperties = React.useMemo(() => {
@@ -210,9 +213,12 @@ export function DeviceTelemetryCard({
               className="w-[140px] text-xs rounded-lg sm:ml-auto"
               aria-label="Select a value"
             >
-              <SelectValue placeholder="Last 24h" />
+              <SelectValue placeholder="All Time" />
             </SelectTrigger>
             <SelectContent className="rounded-xl">
+              <SelectItem value="all" className="rounded-lg text-xs">
+                All Time
+              </SelectItem>
               <SelectItem value="1h" className="rounded-lg text-xs">
                 1h
               </SelectItem>

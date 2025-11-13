@@ -26,7 +26,7 @@ async function getDashboardStats() {
     prisma.milesightDeviceCache.count(),
     prisma.milesightDeviceCache.count({ where: { lastStatus: "ONLINE" } }),
     prisma.milesightDeviceTelemetry.findMany({
-      take: 200,
+      take: 2000, // Increased to fetch more history
       orderBy: { dataTimestamp: "desc" },
     }),
     prisma.milesightDeviceCache.findMany({
