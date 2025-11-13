@@ -148,16 +148,16 @@ export function DeviceTelemetryCard({
         return now - item.timestamp <= timeRanges[timeRange];
       });
 
-  // Sample data to show one bar every 10 minutes (reduce bar density)
+  // Sample data to show 20 bars per hour (one bar every 3 minutes)
   const chartData = React.useMemo(() => {
     if (filteredData.length === 0) return allData;
     
     const sampled = [];
-    const tenMinutes = 10 * 60 * 1000;
+    const threeMinutes = 3 * 60 * 1000; // 20 bars in 60 minutes = 3 minutes per bar
     let lastTimestamp = 0;
     
     filteredData.forEach((item) => {
-      if (item.timestamp - lastTimestamp >= tenMinutes || sampled.length === 0) {
+      if (item.timestamp - lastTimestamp >= threeMinutes || sampled.length === 0) {
         sampled.push(item);
         lastTimestamp = item.timestamp;
       }
