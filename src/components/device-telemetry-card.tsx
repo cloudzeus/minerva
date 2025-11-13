@@ -149,35 +149,24 @@ export function DeviceTelemetryCard({
 
   const chartData = filteredData.length > 0 ? filteredData : allData;
 
-  // Properties to show in chart (exclude battery and other percentage-based values)
+  // Properties to show in chart - ONLY actual temperature sensors
   const chartProperties = React.useMemo(() => {
-    const excludeFromChart = ["battery", "electricity", "humidity"]; // These use different scales
-    return allProperties.filter(prop => !excludeFromChart.includes(prop));
+    // Only include these specific temperature properties
+    const allowedProps = ["temperature_left", "temperature_right"];
+    return allProperties.filter(prop => allowedProps.includes(prop.toLowerCase()));
   }, [allProperties]);
 
   // Color mapping for chart lines
   const chartColors = ["#3b82f6", "#ef4444", "#10b981", "#f59e0b", "#8b5cf6"];
 
-  // Get the top 2 most important properties to display in sensor readings
+  // Get the top 2 most important properties to display in sensor readings - temperature sensors only
   const displayProperties = React.useMemo(() => {
-    // Priority order: temperature > humidity > battery > voltage > others
-    const priority = [
-      "temperature_left", "temperature_right", "temperature",
-      "humidity", "battery", "electricity",
-      "voltage", "current", "power",
-      "signal", "rssi", "snr",
-    ];
-    
-    const sorted = allProperties.sort((a, b) => {
-      const aIndex = priority.indexOf(a);
-      const bIndex = priority.indexOf(b);
-      if (aIndex === -1 && bIndex === -1) return 0;
-      if (aIndex === -1) return 1;
-      if (bIndex === -1) return -1;
-      return aIndex - bIndex;
-    });
-    
-    return sorted.slice(0, 2);
+    // Only show actual temperature sensors, not battery
+    const tempProps = allProperties.filter(prop => 
+      prop.toLowerCase().includes("temperature") && 
+      (prop === "temperature_left" || prop === "temperature_right")
+    );
+    return tempProps.slice(0, 2);
   }, [allProperties]);
 
   return (
