@@ -8,6 +8,7 @@
 import cron from "node-cron";
 import { prisma } from "@/lib/prisma";
 import { requestMilesightToken } from "@/lib/milesight";
+import { monitorCriticalDevices } from "@/lib/device-monitor";
 
 /**
  * Refresh Milesight Access Token
@@ -123,6 +124,20 @@ export function startCronJobs() {
   console.log("[Cron] Timezone: Europe/Athens");
   console.log("=".repeat(80));
 
+  const deviceMonitorJob = cron.schedule(
+    "*/5 * * * *",
+    async () => {
+      await monitorCriticalDevices();
+    },
+    {
+      scheduled: true,
+      timezone: "Europe/Athens",
+    }
+  );
+
+  console.log("[Cron] ✅ Device heartbeat job scheduled (every 5 minutes)");
+  console.log("=".repeat(80));
+
   // Optionally run token refresh immediately on startup
   // This ensures token is fresh when app starts
   console.log("[Cron] Running initial token refresh check...");
@@ -130,9 +145,15 @@ export function startCronJobs() {
     console.error("[Cron] Initial token refresh failed:", error);
   });
 
+  console.log("[Cron] Running initial device heartbeat check...");
+  monitorCriticalDevices().catch((error) => {
+    console.error("[Cron] Initial device monitor failed:", error);
+  });
+
   // Return job references for potential management
   return {
     tokenRefreshJob,
+    deviceMonitorJob,
   };
 }
 
