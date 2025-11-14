@@ -8,7 +8,10 @@
 import cron from "node-cron";
 import { prisma } from "@/lib/prisma";
 import { requestMilesightToken } from "@/lib/milesight";
-import { monitorCriticalDevices } from "@/lib/device-monitor";
+import {
+  monitorCriticalDevices,
+  backfillCriticalDevices,
+} from "@/lib/device-monitor";
 
 /**
  * Refresh Milesight Access Token
@@ -125,7 +128,7 @@ export function startCronJobs() {
   console.log("=".repeat(80));
 
   const deviceMonitorJob = cron.schedule(
-    "*/5 * * * *",
+    "*/30 * * * *",
     async () => {
       await monitorCriticalDevices();
     },
@@ -135,7 +138,21 @@ export function startCronJobs() {
     }
   );
 
-  console.log("[Cron] ✅ Device heartbeat job scheduled (every 5 minutes)");
+  console.log("[Cron] ✅ Device heartbeat job scheduled (every 30 minutes)");
+  console.log("=".repeat(80));
+
+  const deviceBackfillJob = cron.schedule(
+    "*/10 * * * *",
+    async () => {
+      await backfillCriticalDevices();
+    },
+    {
+      scheduled: true,
+      timezone: "Europe/Athens",
+    }
+  );
+
+  console.log("[Cron] ✅ Console backfill job scheduled (every 10 minutes)");
   console.log("=".repeat(80));
 
   // Optionally run token refresh immediately on startup
@@ -149,11 +166,16 @@ export function startCronJobs() {
   monitorCriticalDevices().catch((error) => {
     console.error("[Cron] Initial device monitor failed:", error);
   });
+  console.log("[Cron] Running initial console backfill check...");
+  backfillCriticalDevices().catch((error) => {
+    console.error("[Cron] Initial backfill failed:", error);
+  });
 
   // Return job references for potential management
   return {
     tokenRefreshJob,
     deviceMonitorJob,
+    deviceBackfillJob,
   };
 }
 

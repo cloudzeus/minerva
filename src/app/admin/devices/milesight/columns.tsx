@@ -5,6 +5,7 @@ import { MilesightDeviceCache } from "@prisma/client";
 import { Badge } from "@/components/ui/badge";
 import { formatDateTime } from "@/lib/utils";
 import { FaCircle, FaEdit, FaTrash, FaEye } from "react-icons/fa";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   DataTableRowActions,
   DropdownMenuItem,
@@ -14,7 +15,8 @@ import {
 export function createDeviceColumns(
   onView: (device: MilesightDeviceCache) => void,
   onEdit: (device: MilesightDeviceCache) => void,
-  onDelete: (deviceId: string, deviceName: string) => void
+  onDelete: (deviceId: string, deviceName: string) => void,
+  onToggleCritical: (device: MilesightDeviceCache, value: boolean) => void
 ): ColumnDef<MilesightDeviceCache>[] {
   return [
     {
@@ -99,6 +101,22 @@ export function createDeviceColumns(
       ),
       enableSorting: true,
       enableHiding: true,
+    },
+    {
+      id: "isCritical",
+      header: "Critical",
+      cell: ({ row }) => {
+        const device = row.original;
+        return (
+          <Checkbox
+            checked={device.isCritical}
+            onCheckedChange={(value) => onToggleCritical(device, !!value)}
+            aria-label="Toggle critical monitoring"
+          />
+        );
+      },
+      enableSorting: false,
+      enableHiding: false,
     },
     {
       id: "actions",

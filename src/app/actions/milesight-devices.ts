@@ -313,3 +313,28 @@ export async function syncAllDevices() {
   }
 }
 
+export async function toggleDeviceCritical(deviceId: string, isCritical: boolean) {
+  await requireRole(Role.ADMIN);
+
+  try {
+    await prisma.milesightDeviceCache.update({
+      where: { deviceId },
+      data: {
+        isCritical,
+        ...(isCritical
+          ? {}
+          : {
+              criticalAlertActive: false,
+            }),
+      },
+    });
+
+    revalidatePath("/admin/devices/milesight");
+    revalidatePath(`/admin/devices/milesight/${deviceId}`);
+    return { success: true };
+  } catch (error: any) {
+    console.error("[Milesight Devices] toggle critical error:", error);
+    return { success: false, error: error.message };
+  }
+}
+

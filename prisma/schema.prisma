@@ -210,6 +210,12 @@ model MilesightDeviceCache {
   // Device status
   lastStatus  String?  // e.g. "ONLINE", "OFFLINE"
   deviceType  String?  // Device model/type
+  lastHeartbeatAt DateTime?
+  lastWebhookAt   DateTime?
+  lastConsoleSyncAt DateTime?
+  isCritical         Boolean  @default(false)
+  criticalAlertActive Boolean @default(false)
+  lastCriticalAlertAt DateTime?
   
   // Sync tracking
   lastSyncAt  DateTime @default(now())
@@ -224,6 +230,8 @@ model MilesightDeviceCache {
   @@index([sn])
   @@index([devEUI])
   @@index([lastStatus])
+  @@index([isCritical])
+  @@index([criticalAlertActive])
 }
 
 model MilesightDeviceTelemetry {

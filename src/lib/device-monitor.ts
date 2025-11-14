@@ -1,22 +1,21 @@
 import { prisma } from "@/lib/prisma";
 import { requestMilesightToken } from "@/lib/milesight";
-import { sendDeviceOfflineAlertEmail } from "@/lib/email";
+import {
+  sendDeviceOfflineAlertEmail,
+  sendDeviceRecoveryEmail,
+} from "@/lib/email";
 
-const CRITICAL_DEVICES = [
-  {
-    label: "Critical Sensor 1",
-    serialNumber: "6723D38465150013",
-    devEui: "24E124723D384651",
-  },
-  {
-    label: "Critical Sensor 2",
-    serialNumber: "6723D38552440017",
-    devEui: "24E124723D385524",
-  },
-];
-
-const OFFLINE_THRESHOLD_MINUTES = 10;
+const HEARTBEAT_THRESHOLD_MINUTES = 30;
 const ALERT_RECIPIENTS = ["gkozyris@aic.gr"];
+const CONSOLE_FETCH_LIMIT = 20;
+const DEFAULT_CRITICAL_SERIALS = [
+  "6723D38465150013",
+  "6723D38552440017",
+];
+const DEFAULT_CRITICAL_DEVEUIS = [
+  "24E124723D384651",
+  "24E124723D385524",
+];
 
 export async function monitorCriticalDevices() {
   console.log("=".repeat(80));
@@ -24,88 +23,203 @@ export async function monitorCriticalDevices() {
   console.log("[DeviceMonitor] Time:", new Date().toISOString());
   console.log("=".repeat(80));
 
-  for (const deviceConfig of CRITICAL_DEVICES) {
-    try {
-      await checkCriticalDevice(deviceConfig);
-    } catch (error: any) {
-      console.error(
-        `[DeviceMonitor] ❌ Error while checking device ${deviceConfig.serialNumber}:`,
-        error
+  await prisma.milesightDeviceCache.updateMany({
+    where: { sn: { in: DEFAULT_CRITICAL_SERIALS } },
+    data: { isCritical: true },
+  });
+  await prisma.milesightDeviceCache.updateMany({
+    where: { devEUI: { in: DEFAULT_CRITICAL_DEVEUIS } },
+    data: { isCritical: true },
+  });
+
+  const criticalDevices = await prisma.milesightDeviceCache.findMany({
+    where: { isCritical: true },
+    select: {
+      deviceId: true,
+      name: true,
+      sn: true,
+      devEUI: true,
+      lastWebhookAt: true,
+      criticalAlertActive: true,
+      lastCriticalAlertAt: true,
+    },
+  });
+
+  if (criticalDevices.length === 0) {
+    console.log("[DeviceMonitor] No devices flagged as critical.");
+    return;
+  }
+
+  const now = Date.now();
+
+  for (const device of criticalDevices) {
+    const lastWebhook = device.lastWebhookAt
+      ? device.lastWebhookAt.getTime()
+      : 0;
+    const minutesSince = lastWebhook
+      ? Math.floor((now - lastWebhook) / (1000 * 60))
+      : Number.POSITIVE_INFINITY;
+
+    if (minutesSince >= HEARTBEAT_THRESHOLD_MINUTES) {
+      await handleDeviceOffline(device, minutesSince);
+    } else if (device.criticalAlertActive) {
+      await handleDeviceRecovered(device);
+    } else {
+      console.log(
+        `[DeviceMonitor] ✅ ${device.sn || device.deviceId} heartbeat OK (${minutesSince} minute(s) since last webhook)`
       );
     }
   }
 }
 
-async function checkCriticalDevice(deviceConfig: {
-  label: string;
-  serialNumber: string;
-  devEui: string;
-}) {
-  const device = await prisma.milesightDeviceCache.findFirst({
-    where: {
-      OR: [
-        { sn: deviceConfig.serialNumber },
-        { devEUI: deviceConfig.devEui },
-      ],
+export async function backfillCriticalDevices() {
+  console.log("=".repeat(80));
+  console.log("[DeviceMonitor] Running console backfill for critical devices...");
+  console.log("[DeviceMonitor] Time:", new Date().toISOString());
+  console.log("=".repeat(80));
+
+  const devicesNeedingBackfill = await prisma.milesightDeviceCache.findMany({
+    where: { isCritical: true, criticalAlertActive: true },
+    select: {
+      deviceId: true,
+      sn: true,
+      devEUI: true,
+      name: true,
+      deviceType: true,
     },
   });
 
-  if (!device) {
-    console.warn(
-      "[DeviceMonitor] ⚠️ Device not found in cache:",
-      deviceConfig.serialNumber
-    );
+  if (devicesNeedingBackfill.length === 0) {
+    console.log("[DeviceMonitor] No devices require backfill.");
     return;
   }
 
-  const latestTelemetry = await prisma.milesightDeviceTelemetry.findFirst({
-    where: { deviceId: device.deviceId },
-    orderBy: { dataTimestamp: "desc" },
+  for (const device of devicesNeedingBackfill) {
+    await backfillTelemetryFromConsole(device);
+  }
+}
+
+export async function recordDeviceHeartbeat(
+  deviceId: string,
+  timestamp: number,
+  source: "webhook" | "console"
+) {
+  const device = await prisma.milesightDeviceCache.findUnique({
+    where: { deviceId },
   });
 
-  const now = Date.now();
-  const latestTimestamp = latestTelemetry
-    ? Number(latestTelemetry.dataTimestamp)
-    : 0;
-  const minutesSinceLast = latestTimestamp
-    ? Math.floor((now - latestTimestamp) / (1000 * 60))
-    : Number.POSITIVE_INFINITY;
+  if (!device) {
+    return;
+  }
 
-  if (minutesSinceLast >= OFFLINE_THRESHOLD_MINUTES) {
-    console.warn(
-      `[DeviceMonitor] ⚠️ Device ${deviceConfig.serialNumber} has no telemetry for ${minutesSinceLast} minutes`
-    );
+  const updateData: any = {
+    lastHeartbeatAt: new Date(timestamp),
+  };
 
-    await sendDeviceOfflineAlertEmail({
-      deviceName: device.name || deviceConfig.label,
-      serialNumber: device.sn || deviceConfig.serialNumber,
-      devEui: device.devEUI || deviceConfig.devEui,
-      minutesSinceLast,
+  if (source === "webhook") {
+    updateData.lastWebhookAt = new Date(timestamp);
+    if (device.criticalAlertActive) {
+      updateData.criticalAlertActive = false;
+    }
+  } else {
+    updateData.lastConsoleSyncAt = new Date();
+  }
+
+  await prisma.milesightDeviceCache.update({
+    where: { deviceId },
+    data: updateData,
+  });
+
+  if (source === "webhook" && device.criticalAlertActive && device.isCritical) {
+    await sendDeviceRecoveryEmail({
+      deviceName: device.name || device.deviceId,
+      serialNumber: device.sn,
+      devEui: device.devEUI,
       recipients: ALERT_RECIPIENTS,
     });
 
-    await backfillTelemetryFromConsole(device, deviceConfig);
-  } else {
     console.log(
-      `[DeviceMonitor] ✅ Device ${deviceConfig.serialNumber} is healthy (last telemetry ${minutesSinceLast} minute(s) ago)`
+      `[DeviceMonitor] ✅ Device ${device.deviceId} recovered via webhook`
     );
   }
 }
 
-async function backfillTelemetryFromConsole(
+async function handleDeviceOffline(
   device: {
     deviceId: string;
+    name: string | null;
     sn: string | null;
     devEUI: string | null;
-    name: string | null;
-    deviceType: string | null;
+    criticalAlertActive: boolean;
   },
-  deviceConfig: { serialNumber: string; devEui: string }
+  minutesSince: number
 ) {
-  const settings = await getLatestMilesightSettings();
+  console.warn(
+    `[DeviceMonitor] ⚠️ Device ${device.sn || device.deviceId} missed webhook data for ${minutesSince} minutes`
+  );
 
+  if (!device.criticalAlertActive) {
+    await sendDeviceOfflineAlertEmail({
+      deviceName: device.name || device.deviceId,
+      serialNumber: device.sn,
+      devEui: device.devEUI,
+      minutesSinceLast: minutesSince,
+      recipients: ALERT_RECIPIENTS,
+    });
+
+    await prisma.milesightDeviceCache.update({
+      where: { deviceId: device.deviceId },
+      data: {
+        criticalAlertActive: true,
+        lastCriticalAlertAt: new Date(),
+      },
+    });
+  }
+}
+
+async function handleDeviceRecovered(device: {
+  deviceId: string;
+  name: string | null;
+  sn: string | null;
+  devEUI: string | null;
+}) {
+  await prisma.milesightDeviceCache.update({
+    where: { deviceId: device.deviceId },
+    data: {
+      criticalAlertActive: false,
+    },
+  });
+
+  await sendDeviceRecoveryEmail({
+    deviceName: device.name || device.deviceId,
+    serialNumber: device.sn,
+    devEui: device.devEUI,
+    recipients: ALERT_RECIPIENTS,
+  });
+
+  console.log(
+    `[DeviceMonitor] ✅ Device ${device.sn || device.deviceId} telemetry resumed`
+  );
+}
+
+async function backfillTelemetryFromConsole(device: {
+  deviceId: string;
+  sn: string | null;
+  devEUI: string | null;
+  name: string | null;
+  deviceType: string | null;
+}) {
+  if (!device.devEUI) {
+    console.warn(
+      "[DeviceMonitor] ⚠️ Cannot backfill device without DevEUI:",
+      device.deviceId
+    );
+    return;
+  }
+
+  const settings = await getLatestMilesightSettings();
   if (!settings) {
-    console.warn("[DeviceMonitor] ⚠️ Milesight settings not configured");
+    console.warn("[DeviceMonitor] ⚠️ Milesight settings unavailable");
     return;
   }
 
@@ -122,16 +236,16 @@ async function backfillTelemetryFromConsole(
         Authorization: `Bearer ${settings.accessToken}`,
       },
       body: JSON.stringify({
-        pageSize: 20,
+        pageSize: CONSOLE_FETCH_LIMIT,
         pageNumber: 1,
-        devEUI: deviceConfig.devEui,
+        devEUI: device.devEUI,
         orders: [{ column: "ts", direction: "DESC" }],
       }),
     });
 
     if (!response.ok) {
       console.error(
-        "[DeviceMonitor] ❌ Failed to fetch telemetry from console:",
+        "[DeviceMonitor] ❌ Console fetch failed:",
         response.status,
         await response.text()
       );
@@ -147,15 +261,22 @@ async function backfillTelemetryFromConsole(
       [];
 
     if (!Array.isArray(rows) || rows.length === 0) {
-      console.log("[DeviceMonitor] ⚠️ No telemetry rows returned from console");
+      console.log("[DeviceMonitor] ⚠️ No console rows returned");
       return;
     }
 
     for (const row of rows) {
       await storeTelemetryRow(device, row);
     }
+
+    await prisma.milesightDeviceCache.update({
+      where: { deviceId: device.deviceId },
+      data: {
+        lastConsoleSyncAt: new Date(),
+      },
+    });
   } catch (error: any) {
-    console.error("[DeviceMonitor] ❌ Error fetching telemetry:", error);
+    console.error("[DeviceMonitor] ❌ Console fetch error:", error);
   }
 }
 
@@ -214,7 +335,7 @@ async function storeTelemetryRow(
     data: {
       deviceId: device.deviceId,
       eventId,
-      eventType: row.eventType || row.type || "DEVICE_DATA",
+      eventType: row.eventType || row.type || "CONSOLE_BACKFILL",
       eventVersion: row.version?.toString() || null,
       dataTimestamp: BigInt(Math.floor(timestampValue)),
       dataType: row.dataType || "PROPERTY",
@@ -230,8 +351,10 @@ async function storeTelemetryRow(
     },
   });
 
+  await recordDeviceHeartbeat(device.deviceId, timestampValue, "console");
+
   console.log(
-    `[DeviceMonitor] ✅ Stored telemetry row for device ${device.deviceId} @ ${timestampValue}`
+    `[DeviceMonitor] ✅ Stored console telemetry for ${device.deviceId} @ ${timestampValue}`
   );
 }
 
@@ -259,7 +382,7 @@ async function getLatestMilesightSettings() {
 
       const newExpiresAt = new Date(Date.now() + tokenResponse.expires_in * 1000);
 
-      const updated = await prisma.milesightSettings.update({
+      return await prisma.milesightSettings.update({
         where: { id: settings.id },
         data: {
           accessToken: tokenResponse.access_token,
@@ -267,10 +390,8 @@ async function getLatestMilesightSettings() {
           accessTokenExpiresAt: newExpiresAt,
         },
       });
-
-      return updated;
     } catch (error: any) {
-      console.error("[DeviceMonitor] ❌ Failed to refresh Milesight token:", error);
+      console.error("[DeviceMonitor] ❌ Failed to refresh token:", error);
       return settings.accessToken ? settings : null;
     }
   }

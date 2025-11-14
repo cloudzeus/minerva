@@ -361,3 +361,83 @@ export async function sendDeviceOfflineAlertEmail(
   }
 }
 
+interface DeviceRecoveryAlertEmail {
+  deviceName: string;
+  serialNumber?: string | null;
+  devEui?: string | null;
+  recipients: string[];
+}
+
+export async function sendDeviceRecoveryEmail(alert: DeviceRecoveryAlertEmail) {
+  try {
+    const brevoApiKey = process.env.BREVO_KEY;
+    const fromEmail = process.env.BREVO_FROM_EMAIL || "alerts@minerva.wwa.gr";
+    const fromName = process.env.BREVO_FROM_NAME || "MINERVA Alerts";
+
+    if (!brevoApiKey) {
+      console.error("[Email Service] BREVO_KEY not configured");
+      return {
+        success: false,
+        error: "Email service not configured (missing BREVO_KEY)",
+      };
+    }
+
+    const apiInstance = new brevo.TransactionalEmailsApi();
+    apiInstance.setApiKey(
+      brevo.TransactionalEmailsApiApiKeys.apiKey,
+      brevoApiKey
+    );
+
+    const subject = `✅ Telemetry Resumed: ${alert.deviceName}`;
+    const htmlContent = `
+      <div style="font-family: Arial, sans-serif; line-height: 1.6;">
+        <h2 style="color: #16a34a; margin-bottom: 12px;">Telemetry Flow Restored</h2>
+        <p style="margin-bottom: 12px;">
+          The MINERVA webhook has resumed receiving data from
+          <strong>${alert.deviceName}</strong>.
+        </p>
+        <table style="width: 100%; border-collapse: collapse;">
+          <tr>
+            <td style="padding: 6px 0; width: 120px; color: #6b7280;">Serial Number:</td>
+            <td style="padding: 6px 0;">${alert.serialNumber || "—"}</td>
+          </tr>
+          <tr>
+            <td style="padding: 6px 0; color: #6b7280;">DevEUI:</td>
+            <td style="padding: 6px 0; font-family: 'Courier New', monospace;">
+              ${alert.devEui || "—"}
+            </td>
+          </tr>
+        </table>
+        <p style="margin: 16px 0 8px 0; color: #374151;">
+          Manual console backfill has been halted for this device.
+        </p>
+        <p style="font-size: 12px; color: #9ca3af; margin-top: 24px;">
+          This is an automated message from the MINERVA Device Monitoring System.
+        </p>
+      </div>
+    `;
+
+    const sendSmtpEmail = new brevo.SendSmtpEmail();
+    sendSmtpEmail.subject = subject;
+    sendSmtpEmail.htmlContent = htmlContent;
+    sendSmtpEmail.sender = {
+      name: fromName,
+      email: fromEmail,
+    };
+    sendSmtpEmail.to = alert.recipients.map((email) => ({
+      email,
+      name: email.split("@")[0],
+    }));
+
+    await apiInstance.sendTransacEmail(sendSmtpEmail);
+    console.log("[Email Service] ✅ Recovery alert sent via Brevo");
+    return { success: true };
+  } catch (error: any) {
+    console.error("[Email Service] Failed to send recovery alert:", error);
+    return {
+      success: false,
+      error: error.message || "Failed to send email",
+    };
+  }
+}
+

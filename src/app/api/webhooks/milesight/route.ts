@@ -15,6 +15,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { broadcastToClients } from "@/lib/realtime-broadcast";
 import { sendTemperatureAlertEmail } from "@/lib/email";
+import { recordDeviceHeartbeat } from "@/lib/device-monitor";
 
 export async function POST(request: NextRequest) {
   try {
@@ -225,7 +226,11 @@ export async function POST(request: NextRequest) {
               processed: false,
             },
           });
-
+        await recordDeviceHeartbeat(
+          actualDeviceId,
+          Number(telemetryRecord.dataTimestamp),
+          "webhook"
+        );
           console.log("✅ Telemetry record created:", telemetryRecord.id);
           console.log("[Milesight Webhook] ✅ Stored telemetry for device:", deviceId);
 

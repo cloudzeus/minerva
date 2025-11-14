@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { MilesightDeviceCache } from "@prisma/client";
 import {
@@ -44,7 +44,7 @@ import {
 import { createDeviceColumns } from "./columns";
 import { AddDeviceModal } from "./add-device-modal";
 import { EditDeviceModal } from "./edit-device-modal";
-import { deleteDevice, searchDevices, syncAllDevices } from "@/app/actions/milesight-devices";
+import { deleteDevice, searchDevices, syncAllDevices, toggleDeviceCritical } from "@/app/actions/milesight-devices";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -67,6 +67,7 @@ export function DevicesDataTable({ devices: initialDevices, canManage }: Devices
   const router = useRouter();
   const [devices, setDevices] = useState(initialDevices);
   const [addModalOpen, setAddModalOpen] = useState(false);
+  const [, startCriticalToggle] = useTransition();
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [selectedDevice, setSelectedDevice] = useState<MilesightDeviceCache | null>(null);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -170,7 +171,19 @@ export function DevicesDataTable({ devices: initialDevices, canManage }: Devices
     toast.success("Devices exported to Excel");
   };
 
-  const columns = createDeviceColumns(handleView, handleEdit, handleDeleteClick);
+  const handleCriticalToggle = (device: MilesightDeviceCache, value: boolean) => {
+    startCriticalToggle(async () => {
+      const result = await toggleDeviceCritical(device.deviceId, value);
+      if (result.success) {
+        toast.success(`${device.name || device.sn || device.deviceId} ${value ? "marked as critical" : "removed from critical list"}`);
+        router.refresh();
+      } else {
+        toast.error("Failed to update critical flag", { description: result.error });
+      }
+    });
+  };
+
+  const columns = createDeviceColumns(handleView, handleEdit, handleDeleteClick, handleCriticalToggle);
 
   const tableColumns: ColumnDef<MilesightDeviceCache>[] = [
     {
