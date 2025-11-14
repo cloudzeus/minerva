@@ -229,18 +229,34 @@ async function backfillTelemetryFromConsole(device: {
   )}/data/openapi/v1/logs/search`;
 
   try {
+    const requestBody: Record<string, any> = {
+      pageSize: CONSOLE_FETCH_LIMIT,
+      pageNumber: 1,
+      orders: [{ column: "ts", direction: "DESC" }],
+    };
+
+    if (device.devEUI) {
+      requestBody.devEUIs = [device.devEUI];
+    }
+    if (device.deviceId) {
+      requestBody.deviceIds = [device.deviceId];
+    }
+    if (device.sn) {
+      requestBody.sns = [device.sn];
+    }
+
+    console.log("[DeviceMonitor] Fetching console telemetry:", {
+      apiUrl,
+      requestBody,
+    });
+
     const response = await fetch(apiUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${settings.accessToken}`,
       },
-      body: JSON.stringify({
-        pageSize: CONSOLE_FETCH_LIMIT,
-        pageNumber: 1,
-        devEUI: device.devEUI,
-        orders: [{ column: "ts", direction: "DESC" }],
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!response.ok) {

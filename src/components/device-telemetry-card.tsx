@@ -148,28 +148,57 @@ export function DeviceTelemetryCard({
         return now - item.timestamp <= timeRanges[timeRange];
       });
 
-  // ALWAYS show exactly 20 bars - sample evenly from filtered data
+  // Always show 20 buckets (each bucket renders up to 2 bars: temp left/right)
   const chartData = React.useMemo(() => {
-    if (filteredData.length === 0) return [];
-    
-    const TARGET_BARS = 20;
-    
-    // If we have 20 or fewer data points, return all of them
-    if (filteredData.length <= TARGET_BARS) {
-      return filteredData;
+    const TARGET_BUCKETS = 20;
+
+    if (filteredData.length === 0) {
+      return [];
     }
-    
-    // Sample exactly 20 bars evenly distributed across the time range
-    const sampled: any[] = [];
-    const step = filteredData.length / TARGET_BARS;
-    
-    for (let i = 0; i < TARGET_BARS; i++) {
-      const index = Math.floor(i * step);
-      sampled.push(filteredData[index]);
-    }
-    
-    return sampled;
-  }, [filteredData]);
+
+    const rangeNow = Date.now();
+    const rangeEnd =
+      timeRange === "all"
+        ? filteredData[filteredData.length - 1]?.timestamp ?? rangeNow
+        : rangeNow;
+
+    const defaultRangeStart = rangeEnd - TARGET_BUCKETS * 60 * 1000;
+    const rangeStart =
+      timeRange === "all"
+        ? filteredData[0]?.timestamp ?? defaultRangeStart
+        : rangeEnd - timeRanges[timeRange];
+
+    const totalDuration = Math.max(rangeEnd - rangeStart, TARGET_BUCKETS);
+    const bucketDuration = totalDuration / TARGET_BUCKETS;
+
+    const buckets = Array.from({ length: TARGET_BUCKETS }).map((_, index) => {
+      const bucketStart = rangeStart + index * bucketDuration;
+      const bucketEnd = bucketStart + bucketDuration;
+      const bucketMid = bucketStart + bucketDuration / 2;
+
+      const bucketPoints = filteredData.filter(
+        (item) => item.timestamp >= bucketStart && item.timestamp < bucketEnd
+      );
+
+      const bucketEntry: Record<string, any> = {
+        timestamp: bucketMid,
+      };
+
+      allProperties.forEach((prop) => {
+        const values = bucketPoints
+          .map((point) => point[prop])
+          .filter((value) => typeof value === "number");
+        bucketEntry[prop] =
+          values.length > 0
+            ? values.reduce((sum, value) => sum + value, 0) / values.length
+            : null;
+      });
+
+      return bucketEntry;
+    });
+
+    return buckets;
+  }, [filteredData, timeRange, timeRanges, allProperties]);
 
   // Only show temperature_left and temperature_right in chart
   const hasTemperatureLeft = allProperties.includes("temperature_left");
@@ -315,22 +344,31 @@ export function DeviceTelemetryCard({
                     tickLine={false}
                     tickMargin={10}
                     axisLine={false}
-                    minTickGap={30}
+                    minTickGap={20}
                     tickFormatter={(value) => {
                       try {
                         const timestamp = Number(value);
                         if (!timestamp || isNaN(timestamp)) return "";
                         const date = new Date(timestamp);
                         if (isNaN(date.getTime())) return "";
-                        
-                        // Format based on time range selected
-                        if (timeRange === "1h" || timeRange === "6h") {
-                          return format(date, "HH:mm"); // Show time for short ranges
-                        } else if (timeRange === "24h") {
-                          return format(date, "HH:mm"); // Show time for 24h
-                        } else {
-                          return format(date, "MM/dd HH:mm"); // Show date+time for 7d or all
+
+                        const bucketLabelDuration =
+                          Math.max(
+                            timeRange === "all"
+                              ? (filteredData[filteredData.length - 1]
+                                  ?.timestamp || timestamp) -
+                                  (filteredData[0]?.timestamp || timestamp)
+                              : timeRanges[timeRange],
+                            1
+                          ) / 20;
+
+                        if (bucketLabelDuration <= 60 * 60 * 1000) {
+                          return format(date, "HH:mm");
                         }
+                        if (bucketLabelDuration <= 24 * 60 * 60 * 1000) {
+                          return format(date, "MMM d HH:mm");
+                        }
+                        return format(date, "MMM d");
                       } catch (error) {
                         return "";
                       }
