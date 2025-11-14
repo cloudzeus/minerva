@@ -11,6 +11,7 @@ import { requestMilesightToken } from "@/lib/milesight";
 import {
   monitorCriticalDevices,
   backfillCriticalDevices,
+  pollCriticalDeviceConfigs,
 } from "@/lib/device-monitor";
 
 /**
@@ -155,6 +156,20 @@ export function startCronJobs() {
   console.log("[Cron] ✅ Console backfill job scheduled (every 10 minutes)");
   console.log("=".repeat(80));
 
+  const deviceConfigPollJob = cron.schedule(
+    "*/10 * * * *",
+    async () => {
+      await pollCriticalDeviceConfigs();
+    },
+    {
+      scheduled: true,
+      timezone: "Europe/Athens",
+    }
+  );
+
+  console.log("[Cron] ✅ Device config poll scheduled (every 10 minutes)");
+  console.log("=".repeat(80));
+
   // Optionally run token refresh immediately on startup
   // This ensures token is fresh when app starts
   console.log("[Cron] Running initial token refresh check...");
@@ -170,12 +185,17 @@ export function startCronJobs() {
   backfillCriticalDevices().catch((error) => {
     console.error("[Cron] Initial backfill failed:", error);
   });
+  console.log("[Cron] Running initial device config poll...");
+  pollCriticalDeviceConfigs().catch((error) => {
+    console.error("[Cron] Initial config poll failed:", error);
+  });
 
   // Return job references for potential management
   return {
     tokenRefreshJob,
     deviceMonitorJob,
     deviceBackfillJob,
+    deviceConfigPollJob,
   };
 }
 

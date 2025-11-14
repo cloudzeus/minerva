@@ -4,13 +4,14 @@ import { ColumnDef } from "@tanstack/react-table";
 import { MilesightDeviceCache } from "@prisma/client";
 import { Badge } from "@/components/ui/badge";
 import { formatDateTime } from "@/lib/utils";
-import { FaCircle, FaEdit, FaTrash, FaEye } from "react-icons/fa";
+import { FaCircle, FaEdit, FaTrash, FaEye, FaInfoCircle } from "react-icons/fa";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   DataTableRowActions,
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from "@/components/data-table/data-table-row-actions";
+import { DeviceActions } from "./device-actions";
 
 export function createDeviceColumns(
   onView: (device: MilesightDeviceCache) => void,
@@ -124,26 +125,42 @@ export function createDeviceColumns(
       cell: ({ row }) => {
         const device = row.original;
         return (
-          <DataTableRowActions>
-            <DropdownMenuItem className="text-xs" onClick={() => onView(device)}>
-              <FaEye className="mr-2 h-3 w-3 text-blue-500" />
-              View Details
-            </DropdownMenuItem>
-            <DropdownMenuItem className="text-xs" onClick={() => onEdit(device)}>
-              <FaEdit className="mr-2 h-3 w-3 text-green-500" />
-              Edit
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              className="text-xs text-destructive focus:text-destructive"
-              onClick={() =>
-                onDelete(device.deviceId, device.name || device.sn || device.deviceId)
-              }
+          <div className="flex flex-col gap-2">
+            <DeviceActions
+              deviceId={device.deviceId}
+              deviceLabel={device.name || device.sn || device.deviceId}
             >
-              <FaTrash className="mr-2 h-3 w-3" />
-              Delete
-            </DropdownMenuItem>
-          </DataTableRowActions>
+              {({ fetchInfo, isLoading }) => (
+                <DataTableRowActions>
+                  <DropdownMenuItem className="text-xs" onClick={() => onView(device)}>
+                    <FaEye className="mr-2 h-3 w-3 text-blue-500" />
+                    View Details
+                  </DropdownMenuItem>
+                  <DropdownMenuItem className="text-xs" onClick={() => onEdit(device)}>
+                    <FaEdit className="mr-2 h-3 w-3 text-green-500" />
+                    Edit
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    className="text-xs"
+                    onSelect={() => fetchInfo()}
+                  >
+                    <FaInfoCircle className="mr-2 h-3 w-3 text-purple-500" />
+                    {isLoading ? "Fetching..." : "Fetch Info"}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    className="text-xs text-destructive focus:text-destructive"
+                    onClick={() =>
+                      onDelete(device.deviceId, device.name || device.sn || device.deviceId)
+                    }
+                  >
+                    <FaTrash className="mr-2 h-3 w-3" />
+                    Delete
+                  </DropdownMenuItem>
+                </DataTableRowActions>
+              )}
+            </DeviceActions>
+          </div>
         );
       },
       enableHiding: false,

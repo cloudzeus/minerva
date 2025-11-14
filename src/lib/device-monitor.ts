@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { requestMilesightToken } from "@/lib/milesight";
+import { getMilesightDeviceConfig } from "@/lib/milesight-devices";
 import {
   sendDeviceOfflineAlertEmail,
   sendDeviceRecoveryEmail,
@@ -58,10 +59,10 @@ export async function monitorCriticalDevices() {
       : 0;
     const minutesSince = lastWebhook
       ? Math.floor((now - lastWebhook) / (1000 * 60))
-      : Number.POSITIVE_INFINITY;
+      : null;
 
-    if (minutesSince >= HEARTBEAT_THRESHOLD_MINUTES) {
-      await handleDeviceOffline(device, minutesSince);
+    if (minutesSince === null || minutesSince >= HEARTBEAT_THRESHOLD_MINUTES) {
+      await handleDeviceOffline(device, minutesSince ?? HEARTBEAT_THRESHOLD_MINUTES);
     } else if (device.criticalAlertActive) {
       await handleDeviceRecovered(device);
     } else {
@@ -99,10 +100,77 @@ export async function backfillCriticalDevices() {
   }
 }
 
+export async function pollCriticalDeviceConfigs() {
+  console.log("=".repeat(80));
+  console.log("[DeviceMonitor] Polling Milesight config for critical devices...");
+  console.log("[DeviceMonitor] Time:", new Date().toISOString());
+  console.log("=".repeat(80));
+
+  const settings = await getLatestMilesightSettings();
+
+  if (!settings) {
+    console.warn("[DeviceMonitor] ⚠️ Cannot poll configs without Milesight settings");
+    return;
+  }
+
+  if (!settings.accessToken) {
+    console.warn("[DeviceMonitor] ⚠️ No Milesight access token available for config poll");
+    return;
+  }
+
+  const criticalDevices = await prisma.milesightDeviceCache.findMany({
+    where: { isCritical: true },
+    select: {
+      deviceId: true,
+      sn: true,
+      devEUI: true,
+      name: true,
+      deviceType: true,
+    },
+  });
+
+  if (criticalDevices.length === 0) {
+    console.log("[DeviceMonitor] No critical devices to poll.");
+    return;
+  }
+
+  for (const device of criticalDevices) {
+    try {
+      const response = await getMilesightDeviceConfig(
+        settings.baseUrl,
+        settings.accessToken,
+        device.deviceId
+      );
+
+      const configData = response?.data || response;
+      const properties = configData?.properties || {};
+
+      if (Object.keys(properties).length === 0) {
+        console.log(
+          `[DeviceMonitor] ⚠️ No config properties returned for ${device.deviceId}`
+        );
+        continue;
+      }
+
+      await saveTelemetrySnapshot(device.deviceId, properties, {
+        timestamp: configData?.timestamp ?? Date.now(),
+        eventType: "CONFIG_POLL",
+        source: "config",
+        deviceContext: device,
+      });
+    } catch (error: any) {
+      console.error(
+        `[DeviceMonitor] ❌ Config poll failed for ${device.deviceId}:`,
+        error?.message || error
+      );
+    }
+  }
+}
+
 export async function recordDeviceHeartbeat(
   deviceId: string,
   timestamp: number,
-  source: "webhook" | "console"
+  source: "webhook" | "console" | "config"
 ) {
   const device = await prisma.milesightDeviceCache.findUnique({
     where: { deviceId },
@@ -121,8 +189,10 @@ export async function recordDeviceHeartbeat(
     if (device.criticalAlertActive) {
       updateData.criticalAlertActive = false;
     }
-  } else {
+  } else if (source === "console") {
     updateData.lastConsoleSyncAt = new Date();
+  } else if (source === "config") {
+    updateData.lastHeartbeatAt = new Date(timestamp);
   }
 
   await prisma.milesightDeviceCache.update({
@@ -155,7 +225,9 @@ async function handleDeviceOffline(
   minutesSince: number
 ) {
   console.warn(
-    `[DeviceMonitor] ⚠️ Device ${device.sn || device.deviceId} missed webhook data for ${minutesSince} minutes`
+    `[DeviceMonitor] ⚠️ Device ${device.sn || device.deviceId} missed webhook data for ${
+      minutesSince ?? "more than " + HEARTBEAT_THRESHOLD_MINUTES
+    } minutes`
   );
 
   if (!device.criticalAlertActive) {
@@ -296,6 +368,98 @@ async function backfillTelemetryFromConsole(device: {
   }
 }
 
+export async function saveTelemetrySnapshot(
+  deviceId: string,
+  payload: Record<string, any>,
+  options: {
+    timestamp?: number;
+    eventType?: string;
+    eventId?: string;
+    source?: "webhook" | "console" | "config" | string;
+    deviceContext?: {
+      deviceId: string;
+      sn: string | null;
+      devEUI: string | null;
+      name: string | null;
+      deviceType: string | null;
+    };
+  } = {}
+) {
+  const timestamp = options.timestamp ?? Date.now();
+  const eventType = options.eventType || "CONFIG_SNAPSHOT";
+  const eventId =
+    options.eventId || `${eventType}-${deviceId}-${Math.floor(timestamp)}`;
+
+  const device =
+    options.deviceContext ||
+    (await prisma.milesightDeviceCache.findUnique({
+      where: { deviceId },
+    }));
+
+  if (!device) {
+    console.warn("[Telemetry] Device not found for snapshot:", deviceId);
+    return;
+  }
+
+  const existing = await prisma.milesightDeviceTelemetry.findFirst({
+    where: { deviceId, eventId },
+  });
+
+  if (existing) {
+    return;
+  }
+
+  const temperature =
+    typeof payload.temperature === "number"
+      ? payload.temperature
+      : typeof payload.temperature_left === "number"
+      ? payload.temperature_left
+      : typeof payload.temperature_right === "number"
+      ? payload.temperature_right
+      : null;
+
+  const humidity =
+    typeof payload.humidity === "number" ? payload.humidity : null;
+  const battery =
+    typeof payload.battery === "number"
+      ? Math.round(payload.battery)
+      : typeof payload.battery_level === "number"
+      ? Math.round(payload.battery_level)
+      : null;
+
+  const payloadString = JSON.stringify(payload);
+
+  await prisma.milesightDeviceTelemetry.create({
+    data: {
+      deviceId,
+      eventId,
+      eventType,
+      eventVersion: null,
+      dataTimestamp: BigInt(Math.floor(timestamp)),
+      dataType: "PROPERTY",
+      payload: payloadString,
+      deviceSn: device.sn,
+      deviceName: device.name,
+      deviceModel: device.deviceType,
+      deviceDevEUI: device.devEUI,
+      temperature,
+      humidity,
+      battery,
+      sensorData: payloadString,
+    },
+  });
+
+  await recordDeviceHeartbeat(
+    deviceId,
+    timestamp,
+    (options.source as "webhook" | "console" | "config") || "config"
+  );
+
+  console.log(
+    `[Telemetry] ✅ Snapshot stored for device ${deviceId} @ ${timestamp}`
+  );
+}
+
 async function storeTelemetryRow(
   device: {
     deviceId: string;
@@ -323,55 +487,14 @@ async function storeTelemetryRow(
     row.data || row.payload || row.properties || row.content || {};
   const eventId =
     row.id?.toString() || row.eventId || `${device.deviceId}-${timestampValue}`;
-  const eventExists = await prisma.milesightDeviceTelemetry.findFirst({
-    where: { deviceId: device.deviceId, eventId },
+
+  await saveTelemetrySnapshot(device.deviceId, dataPayload, {
+    timestamp: timestampValue,
+    eventType: row.eventType || row.type || "CONSOLE_BACKFILL",
+    eventId,
+    source: "console",
+    deviceContext: device,
   });
-
-  if (eventExists) {
-    return;
-  }
-
-  const temperature =
-    typeof dataPayload.temperature === "number"
-      ? dataPayload.temperature
-      : typeof dataPayload.temperature_left === "number"
-      ? dataPayload.temperature_left
-      : typeof dataPayload.temperature_right === "number"
-      ? dataPayload.temperature_right
-      : null;
-
-  const humidity =
-    typeof dataPayload.humidity === "number" ? dataPayload.humidity : null;
-  const battery =
-    typeof dataPayload.battery === "number"
-      ? Math.round(dataPayload.battery)
-      : null;
-
-  await prisma.milesightDeviceTelemetry.create({
-    data: {
-      deviceId: device.deviceId,
-      eventId,
-      eventType: row.eventType || row.type || "CONSOLE_BACKFILL",
-      eventVersion: row.version?.toString() || null,
-      dataTimestamp: BigInt(Math.floor(timestampValue)),
-      dataType: row.dataType || "PROPERTY",
-      payload: JSON.stringify(dataPayload),
-      deviceSn: device.sn,
-      deviceName: device.name,
-      deviceModel: device.deviceType,
-      deviceDevEUI: device.devEUI,
-      temperature,
-      humidity,
-      battery,
-      sensorData: JSON.stringify(dataPayload),
-    },
-  });
-
-  await recordDeviceHeartbeat(device.deviceId, timestampValue, "console");
-
-  console.log(
-    `[DeviceMonitor] ✅ Stored console telemetry for ${device.deviceId} @ ${timestampValue}`
-  );
 }
 
 async function getLatestMilesightSettings() {

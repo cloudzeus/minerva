@@ -211,6 +211,37 @@ export async function getMilesightDevice(
 }
 
 /**
+ * Get device config/properties (includes real-time values like temperature)
+ * GET {baseUrl}/device/openapi/v1/devices/{deviceId}/config
+ */
+export async function getMilesightDeviceConfig(
+  baseUrl: string,
+  accessToken: string,
+  deviceId: string
+): Promise<any> {
+  const apiUrl = `${baseUrl}/device/openapi/v1/devices/${deviceId}/config`;
+
+  console.log("[Milesight Devices] Getting device config:", deviceId);
+
+  const response = await fetch(apiUrl, {
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  const responseText = await response.text();
+
+  if (!response.ok) {
+    throw new Error(
+      `Get device config failed (${response.status}): ${responseText}`
+    );
+  }
+
+  return JSON.parse(responseText);
+}
+
+/**
  * Update device information
  * PUT {baseUrl}/device/openapi/v1/devices/{deviceId}
  */

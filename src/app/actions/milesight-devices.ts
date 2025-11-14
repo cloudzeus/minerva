@@ -51,6 +51,54 @@ async function getMilesightAuth() {
   };
 }
 
+async function upsertDeviceCacheRecord(cacheData: ReturnType<typeof mapMilesightDeviceToCache>) {
+  await prisma.$transaction(async (tx) => {
+    const existingById = await tx.milesightDeviceCache.findUnique({
+      where: { deviceId: cacheData.deviceId },
+    });
+
+    if (existingById) {
+      await tx.milesightDeviceCache.update({
+        where: { deviceId: cacheData.deviceId },
+        data: cacheData,
+      });
+      return;
+    }
+
+    const identifierConditions = [];
+    if (cacheData.sn) identifierConditions.push({ sn: cacheData.sn });
+    if (cacheData.devEUI) identifierConditions.push({ devEUI: cacheData.devEUI });
+
+    let existingByIdentifier = null;
+    if (identifierConditions.length > 0) {
+      existingByIdentifier = await tx.milesightDeviceCache.findFirst({
+        where: { OR: identifierConditions },
+      });
+    }
+
+    if (existingByIdentifier) {
+      const oldDeviceId = existingByIdentifier.deviceId;
+
+      await tx.milesightDeviceTelemetry.updateMany({
+        where: { deviceId: oldDeviceId },
+        data: { deviceId: cacheData.deviceId },
+      });
+
+      await tx.temperatureAlert.updateMany({
+        where: { deviceId: oldDeviceId },
+        data: { deviceId: cacheData.deviceId },
+      });
+
+      await tx.milesightDeviceCache.update({
+        where: { deviceId: oldDeviceId },
+        data: cacheData,
+      });
+    } else {
+      await tx.milesightDeviceCache.create({ data: cacheData });
+    }
+  });
+}
+
 /**
  * Search and list devices
  * SECURITY: ADMIN-ONLY
@@ -76,11 +124,7 @@ export async function searchDevices(searchParams: DeviceSearchParams = {}) {
         const cacheData = mapMilesightDeviceToCache(device);
         console.log("[Milesight Devices Action] Mapped cache data:", cacheData);
         
-        await prisma.milesightDeviceCache.upsert({
-          where: { deviceId: cacheData.deviceId },
-          update: cacheData,
-          create: cacheData,
-        });
+        await upsertDeviceCacheRecord(cacheData);
       }
       
       console.log("[Milesight Devices Action] Sync complete");
@@ -298,11 +342,7 @@ export async function syncAllDevices() {
     // Sync all to cache
     for (const device of allDevices) {
       const cacheData = mapMilesightDeviceToCache(device);
-      await prisma.milesightDeviceCache.upsert({
-        where: { deviceId: cacheData.deviceId },
-        update: cacheData,
-        create: cacheData,
-      });
+      await upsertDeviceCacheRecord(cacheData);
     }
 
     revalidatePath("/admin/devices/milesight");
