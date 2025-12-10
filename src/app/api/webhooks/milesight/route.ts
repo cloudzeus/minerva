@@ -450,18 +450,34 @@ async function checkAndSendAlert(
   });
 
   // Update last alert time and increment counter
-  await prisma.temperatureAlert.update({
-    where: { 
-      deviceId_sensorChannel: {
-        deviceId,
-        sensorChannel: channel,
-      }
-    },
-    data: {
-      lastAlertSentAt: now,
-      totalAlertsSent: alertSettings.totalAlertsSent + 1,
-    },
-  });
+  // Handle null channel separately as @@unique constraint doesn't treat null as unique
+  if (channel === null) {
+    const existingAlert = await prisma.temperatureAlert.findFirst({
+      where: { deviceId, sensorChannel: null },
+    });
+    if (existingAlert) {
+      await prisma.temperatureAlert.update({
+        where: { id: existingAlert.id },
+        data: {
+          lastAlertSentAt: now,
+          totalAlertsSent: alertSettings.totalAlertsSent + 1,
+        },
+      });
+    }
+  } else {
+    await prisma.temperatureAlert.update({
+      where: { 
+        deviceId_sensorChannel: {
+          deviceId,
+          sensorChannel: channel,
+        }
+      },
+      data: {
+        lastAlertSentAt: now,
+        totalAlertsSent: alertSettings.totalAlertsSent + 1,
+      },
+    });
+  }
 
   console.log(
     `[Temperature Alert] ✅ Alert sent to ${recipients.length} recipient(s) for ${deviceName}${channelLabel}`

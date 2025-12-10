@@ -1,0 +1,12 @@
+node_modules
+.next
+.git
+.env*.local
+.DS_Store
+*.log
+npm-debug.log*
+.vscode
+.idea
+nixpacks.toml
+.nixpacks
+
