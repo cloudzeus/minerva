@@ -15,6 +15,8 @@ COPY --from=dependencies /app/node_modules ./node_modules
 COPY prisma ./prisma
 RUN npx prisma generate || (sleep 10 && npx prisma generate) || (sleep 20 && npx prisma generate)
 COPY . .
+# Ensure public directory exists (create if it doesn't)
+RUN mkdir -p ./public
 RUN npm run build
 
 # Production stage
@@ -31,6 +33,7 @@ COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
+# Copy public directory (created in builder stage, may be empty)
 COPY --from=builder /app/public ./public
 
 USER nextjs
