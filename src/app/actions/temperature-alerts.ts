@@ -25,24 +25,43 @@ export async function getTemperatureAlert(deviceId: string, sensorChannel?: stri
   try {
     if (sensorChannel !== undefined) {
       // Get specific channel alert
-      const channelValue: string | null = sensorChannel ?? null;
-      const alert = await prisma.temperatureAlert.findUnique({
-        where: { 
-          deviceId_sensorChannel: {
+      // Use findFirst when sensorChannel is null (MySQL unique constraint limitation)
+      if (sensorChannel === null || sensorChannel === undefined) {
+        const alert = await prisma.temperatureAlert.findFirst({
+          where: {
             deviceId,
-            sensorChannel: channelValue,
-          }
-        },
-      });
+            sensorChannel: null,
+          },
+        });
 
-      if (!alert) {
-        return null;
+        if (!alert) {
+          return null;
+        }
+
+        return {
+          ...alert,
+          emailRecipients: JSON.parse(alert.emailRecipients),
+        };
+      } else {
+        // Use unique constraint when sensorChannel is a string
+        const alert = await prisma.temperatureAlert.findUnique({
+          where: { 
+            deviceId_sensorChannel: {
+              deviceId,
+              sensorChannel: sensorChannel,
+            }
+          },
+        });
+
+        if (!alert) {
+          return null;
+        }
+
+        return {
+          ...alert,
+          emailRecipients: JSON.parse(alert.emailRecipients),
+        };
       }
-
-      return {
-        ...alert,
-        emailRecipients: JSON.parse(alert.emailRecipients),
-      };
     } else {
       // Get all alerts for the device
       const alerts = await prisma.temperatureAlert.findMany({
@@ -88,30 +107,68 @@ export async function saveTemperatureAlert(settings: TemperatureAlertSettings) {
     }
 
     const channelValue: string | null = settings.sensorChannel ?? null;
-    const alert = await prisma.temperatureAlert.upsert({
-      where: { 
-        deviceId_sensorChannel: {
+    
+    // Use findFirst + update/create when sensorChannel is null (MySQL unique constraint limitation)
+    let alert;
+    if (channelValue === null) {
+      const existing = await prisma.temperatureAlert.findFirst({
+        where: {
+          deviceId: settings.deviceId,
+          sensorChannel: null,
+        },
+      });
+
+      if (existing) {
+        alert = await prisma.temperatureAlert.update({
+          where: { id: existing.id },
+          data: {
+            minTemperature: settings.minTemperature,
+            maxTemperature: settings.maxTemperature,
+            emailRecipients: JSON.stringify(emails),
+            enabled: settings.enabled,
+            alertCooldown: settings.alertCooldown || 300,
+          },
+        });
+      } else {
+        alert = await prisma.temperatureAlert.create({
+          data: {
+            deviceId: settings.deviceId,
+            sensorChannel: null,
+            minTemperature: settings.minTemperature,
+            maxTemperature: settings.maxTemperature,
+            emailRecipients: JSON.stringify(emails),
+            enabled: settings.enabled,
+            alertCooldown: settings.alertCooldown || 300,
+          },
+        });
+      }
+    } else {
+      // Use unique constraint when sensorChannel is a string
+      alert = await prisma.temperatureAlert.upsert({
+        where: { 
+          deviceId_sensorChannel: {
+            deviceId: settings.deviceId,
+            sensorChannel: channelValue,
+          }
+        },
+        create: {
           deviceId: settings.deviceId,
           sensorChannel: channelValue,
-        }
-      },
-      create: {
-        deviceId: settings.deviceId,
-        sensorChannel: channelValue,
-        minTemperature: settings.minTemperature,
-        maxTemperature: settings.maxTemperature,
-        emailRecipients: JSON.stringify(emails),
-        enabled: settings.enabled,
-        alertCooldown: settings.alertCooldown || 300,
-      },
-      update: {
-        minTemperature: settings.minTemperature,
-        maxTemperature: settings.maxTemperature,
-        emailRecipients: JSON.stringify(emails),
-        enabled: settings.enabled,
-        alertCooldown: settings.alertCooldown || 300,
-      },
-    });
+          minTemperature: settings.minTemperature,
+          maxTemperature: settings.maxTemperature,
+          emailRecipients: JSON.stringify(emails),
+          enabled: settings.enabled,
+          alertCooldown: settings.alertCooldown || 300,
+        },
+        update: {
+          minTemperature: settings.minTemperature,
+          maxTemperature: settings.maxTemperature,
+          emailRecipients: JSON.stringify(emails),
+          enabled: settings.enabled,
+          alertCooldown: settings.alertCooldown || 300,
+        },
+      });
+    }
 
     revalidatePath("/admin");
     revalidatePath("/manager");
@@ -142,14 +199,32 @@ export async function deleteTemperatureAlert(deviceId: string, sensorChannel?: s
 
   try {
     const channelValue: string | null = sensorChannel ?? null;
-    await prisma.temperatureAlert.delete({
-      where: { 
-        deviceId_sensorChannel: {
+    
+    // Use findFirst + delete when sensorChannel is null (MySQL unique constraint limitation)
+    if (channelValue === null) {
+      const existing = await prisma.temperatureAlert.findFirst({
+        where: {
           deviceId,
-          sensorChannel: channelValue,
-        }
-      },
-    });
+          sensorChannel: null,
+        },
+      });
+
+      if (existing) {
+        await prisma.temperatureAlert.delete({
+          where: { id: existing.id },
+        });
+      }
+    } else {
+      // Use unique constraint when sensorChannel is a string
+      await prisma.temperatureAlert.delete({
+        where: { 
+          deviceId_sensorChannel: {
+            deviceId,
+            sensorChannel: channelValue,
+          }
+        },
+      });
+    }
 
     revalidatePath("/admin");
     revalidatePath("/manager");
