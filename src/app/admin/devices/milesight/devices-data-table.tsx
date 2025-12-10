@@ -44,7 +44,7 @@ import {
 import { createDeviceColumns } from "./columns";
 import { AddDeviceModal } from "./add-device-modal";
 import { EditDeviceModal } from "./edit-device-modal";
-import { deleteDevice, searchDevices, syncAllDevices, toggleDeviceCritical, rebootDevice } from "@/app/actions/milesight-devices";
+import { deleteDevice, searchDevices, syncAllDevices, toggleDeviceCritical } from "@/app/actions/milesight-devices";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -183,19 +183,7 @@ export function DevicesDataTable({ devices: initialDevices, canManage }: Devices
     });
   };
 
-  const handleReboot = async (deviceId: string) => {
-    startCriticalToggle(async () => {
-      const result = await rebootDevice(deviceId);
-      if (result.success) {
-        router.refresh();
-        toast.success("Reboot command sent to TS302 device");
-      } else {
-        toast.error("Failed to send reboot command", { description: result.error });
-      }
-    });
-  };
-
-  const columns = createDeviceColumns(handleView, handleEdit, handleDeleteClick, handleCriticalToggle, handleReboot);
+  const columns = createDeviceColumns(handleView, handleEdit, handleDeleteClick, handleCriticalToggle);
 
   const tableColumns: ColumnDef<MilesightDeviceCache>[] = [
     {
