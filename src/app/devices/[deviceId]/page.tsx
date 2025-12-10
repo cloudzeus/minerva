@@ -101,6 +101,10 @@ export default async function DeviceDetailPage({
     getTemperatureAlert(deviceId).catch(() => null), // Ignore errors if user doesn't have permission
   ]);
   
+  if (!device) {
+    notFound();
+  }
+  
   // Parse alerts - could be array (TS302) or single object (TS301)
   const alertsArray = Array.isArray(temperatureAlerts) ? temperatureAlerts : temperatureAlerts ? [temperatureAlerts] : [];
   const isTS302 = device.deviceType?.toUpperCase().includes("TS302") || device.deviceType?.toUpperCase().includes("TS-302");
@@ -108,10 +112,6 @@ export default async function DeviceDetailPage({
   const temperatureAlert = isTS302 ? null : alertsArray.find(a => !a.sensorChannel) || null;
   const temperatureAlertCH1 = isTS302 ? alertsArray.find(a => a.sensorChannel === "CH1") || null : null;
   const temperatureAlertCH2 = isTS302 ? alertsArray.find(a => a.sensorChannel === "CH2") || null : null;
-
-  if (!device) {
-    notFound();
-  }
 
   const isGateway =
     device.deviceType === "GATEWAY" ||
