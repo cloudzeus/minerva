@@ -41,6 +41,8 @@ async function getDeviceWithTelemetry(deviceId: string) {
   });
 }
 
+type DeviceWithTelemetry = NonNullable<Awaited<ReturnType<typeof getDeviceWithTelemetry>>>;
+
 async function getDeviceStats(deviceId: string) {
   const telemetryData = await prisma.milesightDeviceTelemetry.findMany({
     where: { deviceId },
@@ -95,15 +97,18 @@ export default async function DeviceDetailPage({
 }) {
   const { deviceId } = await params;
   
-  const [device, deviceStats, temperatureAlerts] = await Promise.all([
+  const [deviceResult, deviceStats, temperatureAlerts] = await Promise.all([
     getDeviceWithTelemetry(deviceId),
     getDeviceStats(deviceId),
     getTemperatureAlert(deviceId).catch(() => null), // Ignore errors if user doesn't have permission
   ]);
   
-  if (!device) {
+  if (!deviceResult) {
     notFound();
   }
+  
+  // TypeScript now knows device is not null
+  const device: DeviceWithTelemetry = deviceResult;
   
   // Parse alerts - could be array (TS302) or single object (TS301)
   const alertsArray = Array.isArray(temperatureAlerts) ? temperatureAlerts : temperatureAlerts ? [temperatureAlerts] : [];
