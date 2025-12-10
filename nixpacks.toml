@@ -2,7 +2,10 @@
 nixPkgs = ['nodejs_22']
 
 [phases.install]
-cmds = ['npm ci --legacy-peer-deps']
+cmds = [
+  'npm ci --legacy-peer-deps --ignore-scripts',
+  'npx prisma generate || (sleep 10 && npx prisma generate) || (sleep 20 && npx prisma generate)'
+]
 
 [phases.build]
 cmds = ['npm run build']
