@@ -25,11 +25,12 @@ export async function getTemperatureAlert(deviceId: string, sensorChannel?: stri
   try {
     if (sensorChannel !== undefined) {
       // Get specific channel alert
+      const channelValue: string | null = sensorChannel ?? null;
       const alert = await prisma.temperatureAlert.findUnique({
         where: { 
           deviceId_sensorChannel: {
             deviceId,
-            sensorChannel: sensorChannel || null,
+            sensorChannel: channelValue,
           }
         },
       });
@@ -86,16 +87,17 @@ export async function saveTemperatureAlert(settings: TemperatureAlertSettings) {
       };
     }
 
+    const channelValue: string | null = settings.sensorChannel ?? null;
     const alert = await prisma.temperatureAlert.upsert({
       where: { 
         deviceId_sensorChannel: {
           deviceId: settings.deviceId,
-          sensorChannel: settings.sensorChannel || null,
+          sensorChannel: channelValue,
         }
       },
       create: {
         deviceId: settings.deviceId,
-        sensorChannel: settings.sensorChannel || null,
+        sensorChannel: channelValue,
         minTemperature: settings.minTemperature,
         maxTemperature: settings.maxTemperature,
         emailRecipients: JSON.stringify(emails),
@@ -139,11 +141,12 @@ export async function deleteTemperatureAlert(deviceId: string, sensorChannel?: s
   await requireRole([Role.ADMIN, Role.MANAGER]);
 
   try {
+    const channelValue: string | null = sensorChannel ?? null;
     await prisma.temperatureAlert.delete({
       where: { 
         deviceId_sensorChannel: {
           deviceId,
-          sensorChannel: sensorChannel || null,
+          sensorChannel: channelValue,
         }
       },
     });
