@@ -42,6 +42,8 @@ interface DeviceTelemetryCardProps {
   deviceModel?: string;
   telemetryData: MilesightDeviceTelemetry[];
   userRole?: Role;
+  sensorNameLeft?: string | null;
+  sensorNameRight?: string | null;
 }
 
 // Icon mapping for common sensor properties
@@ -70,8 +72,10 @@ export function DeviceTelemetryCard({
   deviceModel,
   telemetryData,
   userRole,
+  sensorNameLeft,
+  sensorNameRight,
 }: DeviceTelemetryCardProps) {
-  const [timeRange, setTimeRange] = React.useState("1h");
+  const [timeRange, setTimeRange] = React.useState("24h");
   
   // Only admins and managers can export
   const canExport = userRole === Role.ADMIN || userRole === Role.MANAGER;
@@ -79,6 +83,22 @@ export function DeviceTelemetryCard({
   // Get latest reading - safely handle empty array
   const latestReading = telemetryData.length > 0 ? telemetryData[0] : null;
   
+  // Standard property order for consistent display
+  const PROPERTY_ORDER = [
+    "temperature_left",
+    "temperature_right",
+    "temperature",
+    "humidity",
+    "battery",
+    "electricity",
+    "voltage",
+    "current",
+    "power",
+    "signal",
+    "rssi",
+    "snr",
+  ];
+
   // Detect all available properties dynamically - FILTER OUT garbage
   const allProperties = React.useMemo(() => {
     const props = new Set<string>();
@@ -98,8 +118,13 @@ export function DeviceTelemetryCard({
         });
       }
     });
-    const propsArray = Array.from(props);
-    console.log(`[${deviceName}] Valid properties (garbage filtered):`, propsArray);
+    
+    // Sort properties: known properties first (in order), then others alphabetically
+    const knownProps = PROPERTY_ORDER.filter(prop => props.has(prop));
+    const otherProps = Array.from(props).filter(prop => !PROPERTY_ORDER.includes(prop)).sort();
+    const propsArray = [...knownProps, ...otherProps];
+    
+    console.log(`[${deviceName}] Valid properties (garbage filtered, ordered):`, propsArray);
     return propsArray;
   }, [telemetryData, deviceName]);
 
@@ -107,6 +132,13 @@ export function DeviceTelemetryCard({
   const latestValues = React.useMemo(() => {
     if (!latestReading?.sensorData) return {};
     return JSON.parse(latestReading.sensorData);
+  }, [latestReading]);
+
+  // Get battery capacity from sensor data
+  const batteryCapacity = React.useMemo(() => {
+    if (!latestReading?.sensorData) return null;
+    const sensorData = JSON.parse(latestReading.sensorData);
+    return sensorData.batteryCapacity || sensorData.battery_capacity || sensorData.capacity || null;
   }, [latestReading]);
 
   // Prepare chart data with ALL numeric properties
@@ -204,14 +236,18 @@ export function DeviceTelemetryCard({
   const hasTemperatureLeft = allProperties.includes("temperature_left");
   const hasTemperatureRight = allProperties.includes("temperature_right");
 
+  // Use custom sensor names if available, otherwise use defaults
+  const leftSensorLabel = sensorNameLeft || "CH1";
+  const rightSensorLabel = sensorNameRight || "CH2";
+
   // Chart configuration for shadcn
   const chartConfig = {
     temperature_left: {
-      label: "Temperature Left",
+      label: leftSensorLabel,
       color: "hsl(var(--chart-1))",
     },
     temperature_right: {
-      label: "Temperature Right", 
+      label: rightSensorLabel, 
       color: "hsl(var(--chart-2))",
     },
   } satisfies ChartConfig;
@@ -248,7 +284,7 @@ export function DeviceTelemetryCard({
             </Badge>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
           {canExport && (
             <ExportTelemetryButton
               deviceId={deviceId}
@@ -258,7 +294,7 @@ export function DeviceTelemetryCard({
           )}
           <Select value={timeRange} onValueChange={setTimeRange}>
             <SelectTrigger
-              className="w-[140px] text-xs rounded-lg sm:ml-auto"
+              className="w-[140px] text-xs rounded-lg"
               aria-label="Select a value"
             >
               <SelectValue placeholder="All Time" />
@@ -312,6 +348,14 @@ export function DeviceTelemetryCard({
                   unit: "",
                 };
                 const Icon = config.icon;
+                
+                // Use custom sensor names for temperature_left and temperature_right
+                let displayName = prop.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+                if (prop === "temperature_left" && sensorNameLeft) {
+                  displayName = sensorNameLeft;
+                } else if (prop === "temperature_right" && sensorNameRight) {
+                  displayName = sensorNameRight;
+                }
 
                 return (
                   <div
@@ -321,7 +365,7 @@ export function DeviceTelemetryCard({
                     <div className="flex items-center gap-2">
                       <Icon className={`h-3 w-3 ${config.color}`} />
                       <span className="text-xs font-medium text-muted-foreground">
-                        {prop.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
+                        {displayName}
                       </span>
                     </div>
                       <div className="mt-1 text-lg font-bold">
@@ -333,6 +377,21 @@ export function DeviceTelemetryCard({
                 );
               })}
             </div>
+            
+            {/* Battery Capacity Display */}
+            {batteryCapacity !== null && (
+              <div className="mb-4 rounded-lg border border-border/40 bg-muted/50 p-3">
+                <div className="flex items-center gap-2">
+                  <FaBatteryHalf className="h-3 w-3 text-green-500" />
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Battery Capacity
+                  </span>
+                </div>
+                <div className="mt-1 text-lg font-bold">
+                  {typeof batteryCapacity === "number" ? `${batteryCapacity}mAh` : batteryCapacity}
+                </div>
+              </div>
+            )}
 
             {/* Temperature Bar Chart - Multiple */}
             {chartData.length > 0 && (hasTemperatureLeft || hasTemperatureRight) ? (
@@ -433,12 +492,20 @@ export function DeviceTelemetryCard({
                     const config = propertyIcons[prop] || { icon: FaChartLine, color: "text-gray-500", unit: "" };
                     const Icon = config.icon;
                     
+                    // Use custom sensor names for temperature_left and temperature_right
+                    let displayName = prop.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase());
+                    if (prop === "temperature_left" && sensorNameLeft) {
+                      displayName = sensorNameLeft;
+                    } else if (prop === "temperature_right" && sensorNameRight) {
+                      displayName = sensorNameRight;
+                    }
+                    
                     return (
                       <div key={prop} className="flex items-center justify-between rounded-lg border border-border/40 bg-background p-2.5">
                         <div className="flex items-center gap-2">
                           <Icon className={`h-3.5 w-3.5 ${config.color}`} />
                           <span className="text-xs text-muted-foreground">
-                            {prop.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())}
+                            {displayName}
                           </span>
                         </div>
                         <span className="text-xs font-mono font-semibold">

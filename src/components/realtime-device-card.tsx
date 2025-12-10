@@ -9,6 +9,8 @@ interface RealtimeDeviceCardProps {
   deviceModel?: string;
   initialTelemetryData: MilesightDeviceTelemetry[];
   userRole?: Role;
+  sensorNameLeft?: string | null;
+  sensorNameRight?: string | null;
 }
 
 export function RealtimeDeviceCard({
@@ -19,6 +21,8 @@ export function RealtimeDeviceCard({
   deviceModel,
   initialTelemetryData,
   userRole,
+  sensorNameLeft,
+  sensorNameRight,
 }: RealtimeDeviceCardProps) {
   // Simple pass-through - no real-time updates, just show database data
   return (
@@ -30,6 +34,8 @@ export function RealtimeDeviceCard({
       deviceModel={deviceModel}
       telemetryData={initialTelemetryData}
       userRole={userRole}
+      sensorNameLeft={sensorNameLeft}
+      sensorNameRight={sensorNameRight}
     />
   );
 }

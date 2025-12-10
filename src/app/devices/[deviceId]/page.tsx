@@ -95,11 +95,19 @@ export default async function DeviceDetailPage({
 }) {
   const { deviceId } = await params;
   
-  const [device, deviceStats, temperatureAlert] = await Promise.all([
+  const [device, deviceStats, temperatureAlerts] = await Promise.all([
     getDeviceWithTelemetry(deviceId),
     getDeviceStats(deviceId),
     getTemperatureAlert(deviceId).catch(() => null), // Ignore errors if user doesn't have permission
   ]);
+  
+  // Parse alerts - could be array (TS302) or single object (TS301)
+  const alertsArray = Array.isArray(temperatureAlerts) ? temperatureAlerts : temperatureAlerts ? [temperatureAlerts] : [];
+  const isTS302 = device.deviceType?.toUpperCase().includes("TS302") || device.deviceType?.toUpperCase().includes("TS-302");
+  
+  const temperatureAlert = isTS302 ? null : alertsArray.find(a => !a.sensorChannel) || null;
+  const temperatureAlertCH1 = isTS302 ? alertsArray.find(a => a.sensorChannel === "CH1") || null : null;
+  const temperatureAlertCH2 = isTS302 ? alertsArray.find(a => a.sensorChannel === "CH2") || null : null;
 
   if (!device) {
     notFound();
@@ -135,6 +143,7 @@ export default async function DeviceDetailPage({
                 </h1>
                 <Badge
                   variant={device.lastStatus === "ONLINE" ? "default" : "secondary"}
+                  className="text-[8px]"
                 >
                   <FaCircle
                     className={`mr-1 h-2 w-2 ${
@@ -263,7 +272,10 @@ export default async function DeviceDetailPage({
           <TemperatureAlertSettings
             deviceId={deviceId}
             deviceName={device.name || `Device ${deviceId}`}
+            deviceType={device.deviceType}
             initialSettings={temperatureAlert}
+            initialSettingsCH1={temperatureAlertCH1}
+            initialSettingsCH2={temperatureAlertCH2}
           />
         )}
 

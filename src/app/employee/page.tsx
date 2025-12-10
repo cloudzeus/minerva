@@ -155,6 +155,8 @@ export default async function EmployeeDashboard() {
                     deviceModel={device.deviceType || undefined}
                     initialTelemetryData={deviceTelemetry}
                     userRole={user?.role}
+                    sensorNameLeft={device.sensorNameLeft}
+                    sensorNameRight={device.sensorNameRight}
                   />
                 );
               })}

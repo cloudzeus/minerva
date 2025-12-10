@@ -15,8 +15,12 @@ import {
   searchMilesightDevices,
   addMilesightDevice,
   getMilesightDevice,
+  getMilesightDeviceConfig,
   updateMilesightDevice,
+  updateMilesightDeviceConfig,
+  updateMilesightDeviceFirmware,
   deleteMilesightDevice,
+  rebootTS302Device,
   mapMilesightDeviceToCache,
   type DeviceSearchParams,
 } from "@/lib/milesight-devices";
@@ -228,6 +232,28 @@ export async function getDeviceDetails(deviceId: string) {
 }
 
 /**
+ * Get latest configuration/properties for a device
+ * SECURITY: ADMIN-ONLY
+ */
+export async function getDeviceConfiguration(deviceId: string) {
+  await requireRole(Role.ADMIN);
+
+  try {
+    const { baseUrl, accessToken } = await getMilesightAuth();
+    const response = await getMilesightDeviceConfig(baseUrl, accessToken, deviceId);
+    const normalized = response && typeof response === "object" && "data" in response ? (response as any).data : response;
+
+    return {
+      success: true,
+      data: normalized,
+    };
+  } catch (error: any) {
+    console.error("[Milesight Devices] Config fetch error:", error);
+    return { success: false, error: error.message, data: null };
+  }
+}
+
+/**
  * Update device information
  * SECURITY: ADMIN-ONLY
  */
@@ -271,6 +297,80 @@ export async function updateDevice(deviceId: string, formData: FormData) {
     return { success: true };
   } catch (error: any) {
     console.error("[Milesight Devices] Update error:", error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Update device configuration/properties
+ * SECURITY: ADMIN-ONLY
+ */
+export async function updateDeviceConfiguration(
+  deviceId: string,
+  properties: Record<string, any>
+) {
+  const currentUser = await requireRole(Role.ADMIN);
+
+  try {
+    const { baseUrl, accessToken } = await getMilesightAuth();
+    const response = await updateMilesightDeviceConfig(baseUrl, accessToken, deviceId, properties);
+    const normalized = response && typeof response === "object" && "data" in response ? (response as any).data : response;
+
+    await prisma.activityLog.create({
+      data: {
+        userId: currentUser.id,
+        type: "PROFILE_UPDATED",
+        description: `Updated configuration for Milesight device: ${deviceId}`,
+      },
+    });
+
+    revalidatePath("/admin/devices/milesight");
+    revalidatePath(`/admin/devices/milesight/${deviceId}`);
+
+    return { success: true, data: normalized };
+  } catch (error: any) {
+    console.error("[Milesight Devices] Config update error:", error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Trigger firmware update
+ * SECURITY: ADMIN-ONLY
+ */
+export async function triggerFirmwareUpgrade(
+  deviceId: string,
+  payload: {
+    firmwareVersion: string;
+    firmwareFileId?: string;
+    releaseNotes?: string;
+  }
+) {
+  const currentUser = await requireRole(Role.ADMIN);
+
+  if (!payload?.firmwareVersion) {
+    return { success: false, error: "Firmware version is required." };
+  }
+
+  try {
+    const { baseUrl, accessToken } = await getMilesightAuth();
+    const response = await updateMilesightDeviceFirmware(baseUrl, accessToken, deviceId, payload);
+    const normalized = response && typeof response === "object" && "data" in response ? (response as any).data : response;
+
+    await prisma.activityLog.create({
+      data: {
+        userId: currentUser.id,
+        type: "PROFILE_UPDATED",
+        description: `Triggered firmware update (${payload.firmwareVersion}) for Milesight device: ${deviceId}`,
+      },
+    });
+
+    revalidatePath("/admin/devices/milesight");
+    revalidatePath(`/admin/devices/milesight/${deviceId}`);
+
+    return { success: true, data: normalized };
+  } catch (error: any) {
+    console.error("[Milesight Devices] Firmware update error:", error);
     return { success: false, error: error.message };
   }
 }
@@ -375,6 +475,184 @@ export async function toggleDeviceCritical(deviceId: string, isCritical: boolean
   } catch (error: any) {
     console.error("[Milesight Devices] toggle critical error:", error);
     return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Reboot TS302 device via downlink command
+ * SECURITY: ADMIN-ONLY
+ */
+export async function rebootDevice(deviceId: string) {
+  const currentUser = await requireRole(Role.ADMIN);
+
+  try {
+    // Get device info to check if it's TS302 and get DevEUI
+    const device = await prisma.milesightDeviceCache.findUnique({
+      where: { deviceId },
+      select: {
+        deviceType: true,
+        devEUI: true,
+        name: true,
+        sn: true,
+      },
+    });
+
+    if (!device) {
+      return { success: false, error: "Device not found in local cache" };
+    }
+
+    // Check if device is TS302
+    const isTS302 = device.deviceType?.toUpperCase().includes("TS302") || 
+                    device.deviceType?.toUpperCase().includes("TS-302");
+
+    if (!isTS302) {
+      return { 
+        success: false, 
+        error: "Reboot command is only supported for TS302 devices. This device type is: " + (device.deviceType || "Unknown")
+      };
+    }
+
+    if (!device.devEUI) {
+      return { 
+        success: false, 
+        error: "Device DevEUI is required for downlink commands. Please ensure the device has a DevEUI configured."
+      };
+    }
+
+    const { baseUrl, accessToken } = await getMilesightAuth();
+    const response = await rebootTS302Device(baseUrl, accessToken, deviceId, device.devEUI);
+
+    // Log activity
+    await prisma.activityLog.create({
+      data: {
+        userId: currentUser.id,
+        type: "PROFILE_UPDATED",
+        description: `Sent reboot command to TS302 device: ${device.name || device.sn || deviceId}`,
+      },
+    });
+
+    revalidatePath("/admin/devices/milesight");
+    revalidatePath(`/admin/devices/milesight/${deviceId}`);
+    return { success: true, data: response };
+  } catch (error: any) {
+    console.error("[Milesight Devices] Reboot error:", error);
+    
+    // Provide helpful error message
+    const errorMessage = error.message || "Unknown error";
+    if (errorMessage.includes("No supported downlink endpoint")) {
+      return {
+        success: false,
+        error: "The Milesight OpenAPI does not support downlink commands. TS302 reboot commands must be sent through the gateway's embedded Network Server (NS) API (e.g., UG65 gateway). The reboot command is: ff10ff (hex) on application port 85. To enable this feature, you would need to integrate with your gateway's Network Server API.",
+      };
+    }
+    
+    return { success: false, error: errorMessage };
+  }
+}
+
+/**
+ * Update device sensor names (for TS302 and similar devices)
+ * SECURITY: ADMIN-ONLY
+ */
+export async function updateDeviceSensorNames(
+  deviceId: string,
+  sensorNames: {
+    sensorNameLeft?: string;
+    sensorNameRight?: string;
+  }
+) {
+  const currentUser = await requireRole(Role.ADMIN);
+
+  try {
+    await prisma.milesightDeviceCache.update({
+      where: { deviceId },
+      data: {
+        sensorNameLeft: sensorNames.sensorNameLeft || null,
+        sensorNameRight: sensorNames.sensorNameRight || null,
+      },
+    });
+
+    // Try to create activity log, but don't fail if user doesn't exist
+    try {
+      // Verify user exists before creating activity log
+      const userExists = await prisma.user.findUnique({
+        where: { id: currentUser.id },
+        select: { id: true },
+      });
+
+      if (userExists) {
+        await prisma.activityLog.create({
+          data: {
+            userId: currentUser.id,
+            type: "PROFILE_UPDATED",
+            description: `Updated sensor names for device: ${deviceId}`,
+          },
+        });
+      } else {
+        console.warn(`[Milesight Devices] User ${currentUser.id} not found in database, skipping activity log`);
+      }
+    } catch (logError: any) {
+      // Log the error but don't fail the operation
+      console.error("[Milesight Devices] Failed to create activity log:", logError);
+    }
+
+    revalidatePath("/admin/devices/milesight");
+    revalidatePath(`/admin/devices/milesight/${deviceId}`);
+    return { success: true };
+  } catch (error: any) {
+    console.error("[Milesight Devices] Sensor names update error:", error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Check for offline devices and send email notification
+ * SECURITY: ADMIN-ONLY (can be called by cron)
+ */
+export async function checkAndNotifyOfflineDevices() {
+  try {
+    const offlineDevices = await prisma.milesightDeviceCache.findMany({
+      where: {
+        lastStatus: "OFFLINE",
+      },
+      select: {
+        deviceId: true,
+        name: true,
+        sn: true,
+        deviceType: true,
+        lastSyncAt: true,
+        lastStatus: true,
+      },
+    });
+
+    if (offlineDevices.length === 0) {
+      return { success: true, count: 0, message: "No offline devices found" };
+    }
+
+    // Import email function
+    const { sendOfflineDeviceNotificationEmail } = await import("@/lib/email");
+    
+    const result = await sendOfflineDeviceNotificationEmail({
+      devices: offlineDevices.map((d) => ({
+        deviceId: d.deviceId,
+        name: d.name || d.sn || d.deviceId,
+        sn: d.sn || "—",
+        deviceType: d.deviceType || "Unknown",
+        lastSyncAt: d.lastSyncAt,
+      })),
+      recipientEmail: "gkozyris@aic.gr",
+    });
+
+    return {
+      success: result.success,
+      count: offlineDevices.length,
+      message: result.success
+        ? `Notification sent for ${offlineDevices.length} offline device(s)`
+        : result.error || "Failed to send notification",
+    };
+  } catch (error: any) {
+    console.error("[Milesight Devices] Check offline devices error:", error);
+    return { success: false, error: error.message, count: 0 };
   }
 }
 

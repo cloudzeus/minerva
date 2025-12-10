@@ -4,7 +4,7 @@ import { ColumnDef } from "@tanstack/react-table";
 import { MilesightDeviceCache } from "@prisma/client";
 import { Badge } from "@/components/ui/badge";
 import { formatDateTime } from "@/lib/utils";
-import { FaCircle, FaEdit, FaTrash, FaEye, FaInfoCircle } from "react-icons/fa";
+import { FaCircle, FaEdit, FaTrash, FaEye, FaInfoCircle, FaPowerOff } from "react-icons/fa";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   DataTableRowActions,
@@ -18,6 +18,7 @@ export function createDeviceColumns(
   onEdit: (device: MilesightDeviceCache) => void,
   onDelete: (deviceId: string, deviceName: string) => void,
   onToggleCritical: (device: MilesightDeviceCache, value: boolean) => void
+  // onReboot: (deviceId: string) => void // Not available via Milesight OpenAPI - requires gateway NS API
 ): ColumnDef<MilesightDeviceCache>[] {
   return [
     {
@@ -62,7 +63,7 @@ export function createDeviceColumns(
         return status ? (
           <Badge
             variant={status === "ONLINE" ? "default" : "secondary"}
-            className="gap-1 text-xs"
+            className="gap-1 text-[8px]"
           >
             <FaCircle
               className={
@@ -83,7 +84,7 @@ export function createDeviceColumns(
       header: "Tag",
       cell: ({ row }) =>
         row.getValue("tag") ? (
-          <Badge variant="outline" className="text-xs">
+          <Badge variant="outline" className="text-[8px]">
             {row.getValue("tag")}
           </Badge>
         ) : (
@@ -147,6 +148,17 @@ export function createDeviceColumns(
                     <FaInfoCircle className="mr-2 h-3 w-3 text-purple-500" />
                     {isLoading ? "Fetching..." : "Fetch Info"}
                   </DropdownMenuItem>
+                  {/* Reboot via downlink not available through Milesight OpenAPI
+                      Downlink commands must be sent through the gateway's Network Server API
+                      {device.deviceType?.toUpperCase().includes("TS302") && device.devEUI && (
+                    <DropdownMenuItem
+                      className="text-xs"
+                      onClick={() => onReboot(device.deviceId)}
+                    >
+                      <FaPowerOff className="mr-2 h-3 w-3 text-orange-500" />
+                      Reboot Device
+                    </DropdownMenuItem>
+                  )} */}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     className="text-xs text-destructive focus:text-destructive"

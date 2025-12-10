@@ -63,7 +63,7 @@ export function createDeviceColumns(
       cell: ({ row }) => {
         const status = row.getValue("lastStatus") as string;
         return (
-          <Badge variant={status === "ONLINE" ? "default" : "secondary"}>
+          <Badge variant={status === "ONLINE" ? "default" : "secondary"} className="text-[8px]">
             <FaCircle
               className={`mr-1 h-2 w-2 ${
                 status === "ONLINE" ? "text-green-500" : "text-gray-500"

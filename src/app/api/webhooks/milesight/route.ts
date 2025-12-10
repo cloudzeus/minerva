@@ -328,91 +328,144 @@ async function checkTemperatureAlerts(
   sensorData: any
 ) {
   try {
-    // Get alert settings for this device
-    const alertSettings = await prisma.temperatureAlert.findUnique({
+    // Get all alert settings for this device (CH1, CH2, or single sensor)
+    const allAlertSettings = await prisma.temperatureAlert.findMany({
       where: { deviceId },
     });
 
-    if (!alertSettings || !alertSettings.enabled) {
-      return; // No alert configured or disabled
+    if (allAlertSettings.length === 0) {
+      return; // No alerts configured
     }
 
-    // Extract all temperature values from sensor data
-    const temperatures: { key: string; value: number }[] = [];
-    
-    Object.entries(sensorData).forEach(([key, value]) => {
-      if (
-        (key.toLowerCase().includes("temperature") || key === "temp") &&
-        typeof value === "number"
-      ) {
-        temperatures.push({ key, value });
+    // Map alerts by sensor channel
+    const alertsByChannel = new Map<string | null, typeof allAlertSettings[0]>();
+    allAlertSettings.forEach(alert => {
+      if (alert.enabled) {
+        alertsByChannel.set(alert.sensorChannel, alert);
       }
     });
 
-    if (temperatures.length === 0) {
-      return; // No temperature data
+    if (alertsByChannel.size === 0) {
+      return; // All alerts disabled
     }
 
-    // Check each temperature value against thresholds
-    for (const { key, value } of temperatures) {
-      const isBelowMin = value < alertSettings.minTemperature;
-      const isAboveMax = value > alertSettings.maxTemperature;
+    const now = new Date();
 
-      if (isBelowMin || isAboveMax) {
-        // Check cooldown period
-        const now = new Date();
-        const lastAlertTime = alertSettings.lastAlertSentAt;
-        const cooldownMs = alertSettings.alertCooldown * 1000;
-
-        if (
-          lastAlertTime &&
-          now.getTime() - lastAlertTime.getTime() < cooldownMs
-        ) {
-          console.log(
-            `[Temperature Alert] Skipping alert for ${deviceName} - still in cooldown period`
-          );
-          continue; // Still in cooldown
-        }
-
-        // Send alert email
-        console.log(
-          `[Temperature Alert] 🚨 Temperature ${isBelowMin ? "too low" : "too high"} for ${deviceName}: ${value}°C`
-        );
-
-        const recipients = JSON.parse(alertSettings.emailRecipients);
-        
-        await sendTemperatureAlertEmail({
+    // Check temperature_left (CH1) if alert exists
+    if (sensorData.temperature_left !== undefined && typeof sensorData.temperature_left === "number") {
+      const ch1Alert = alertsByChannel.get("CH1");
+      if (ch1Alert) {
+        await checkAndSendAlert(
           deviceId,
           deviceName,
-          currentTemperature: value,
-          minThreshold: alertSettings.minTemperature,
-          maxThreshold: alertSettings.maxTemperature,
-          alertType: isBelowMin ? "MIN" : "MAX",
-          timestamp: now,
-          recipients,
-        });
-
-        // Update last alert time and increment counter
-        await prisma.temperatureAlert.update({
-          where: { deviceId },
-          data: {
-            lastAlertSentAt: now,
-            totalAlertsSent: alertSettings.totalAlertsSent + 1,
-          },
-        });
-
-        console.log(
-          `[Temperature Alert] ✅ Alert sent to ${recipients.length} recipient(s)`
+          sensorData.temperature_left,
+          ch1Alert,
+          "CH1",
+          now
         );
+      }
+    }
 
-        // Only send one alert per webhook event (first threshold exceeded)
-        break;
+    // Check temperature_right (CH2) if alert exists
+    if (sensorData.temperature_right !== undefined && typeof sensorData.temperature_right === "number") {
+      const ch2Alert = alertsByChannel.get("CH2");
+      if (ch2Alert) {
+        await checkAndSendAlert(
+          deviceId,
+          deviceName,
+          sensorData.temperature_right,
+          ch2Alert,
+          "CH2",
+          now
+        );
+      }
+    }
+
+    // Check generic temperature (for single-sensor devices like TS301)
+    if (sensorData.temperature !== undefined && typeof sensorData.temperature === "number") {
+      const singleAlert = alertsByChannel.get(null);
+      if (singleAlert) {
+        await checkAndSendAlert(
+          deviceId,
+          deviceName,
+          sensorData.temperature,
+          singleAlert,
+          null,
+          now
+        );
       }
     }
   } catch (error: any) {
     console.error("[Temperature Alert] Error checking alerts:", error);
     // Don't throw - we don't want to fail the webhook if alert checking fails
   }
+}
+
+async function checkAndSendAlert(
+  deviceId: string,
+  deviceName: string,
+  temperature: number,
+  alertSettings: any,
+  channel: string | null,
+  now: Date
+) {
+  const isBelowMin = temperature < alertSettings.minTemperature;
+  const isAboveMax = temperature > alertSettings.maxTemperature;
+
+  if (!isBelowMin && !isAboveMax) {
+    return; // Temperature within range
+  }
+
+  // Check cooldown period
+  const lastAlertTime = alertSettings.lastAlertSentAt;
+  const cooldownMs = alertSettings.alertCooldown * 1000;
+
+  if (
+    lastAlertTime &&
+    now.getTime() - lastAlertTime.getTime() < cooldownMs
+  ) {
+    console.log(
+      `[Temperature Alert] Skipping alert for ${deviceName}${channel ? ` ${channel}` : ""} - still in cooldown period`
+    );
+    return; // Still in cooldown
+  }
+
+  // Send alert email
+  const channelLabel = channel ? ` ${channel}` : "";
+  console.log(
+    `[Temperature Alert] 🚨 Temperature ${isBelowMin ? "too low" : "too high"} for ${deviceName}${channelLabel}: ${temperature}°C`
+  );
+
+  const recipients = JSON.parse(alertSettings.emailRecipients);
+  
+  await sendTemperatureAlertEmail({
+    deviceId,
+    deviceName: `${deviceName}${channelLabel}`,
+    currentTemperature: temperature,
+    minThreshold: alertSettings.minTemperature,
+    maxThreshold: alertSettings.maxTemperature,
+    alertType: isBelowMin ? "MIN" : "MAX",
+    timestamp: now,
+    recipients,
+  });
+
+  // Update last alert time and increment counter
+  await prisma.temperatureAlert.update({
+    where: { 
+      deviceId_sensorChannel: {
+        deviceId,
+        sensorChannel: channel,
+      }
+    },
+    data: {
+      lastAlertSentAt: now,
+      totalAlertsSent: alertSettings.totalAlertsSent + 1,
+    },
+  });
+
+  console.log(
+    `[Temperature Alert] ✅ Alert sent to ${recipients.length} recipient(s) for ${deviceName}${channelLabel}`
+  );
 }
 
 // Support GET for health check / testing

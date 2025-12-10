@@ -146,9 +146,8 @@ export async function pollCriticalDeviceConfigs() {
       const properties = configData?.properties || {};
 
       if (Object.keys(properties).length === 0) {
-        console.log(
-          `[DeviceMonitor] ⚠️ No config properties returned for ${device.deviceId}`
-        );
+        // This is normal - some devices may not have config properties available
+        // Only log at debug level, not as a warning
         continue;
       }
 
@@ -332,10 +331,30 @@ async function backfillTelemetryFromConsole(device: {
     });
 
     if (!response.ok) {
+      const errorText = await response.text();
+      const errorData = errorText ? (() => {
+        try {
+          return JSON.parse(errorText);
+        } catch {
+          return { errMsg: errorText };
+        }
+      })() : {};
+
+      // Handle known API limitations gracefully
+      if (response.status === 404 || errorData.errMsg?.includes("No matching handler")) {
+        // The logs/search endpoint may not be available for all device types or API versions
+        // This is expected for some devices, so we log at info level instead of error
+        console.log(
+          `[DeviceMonitor] ℹ️ Console logs endpoint not available for device ${device.deviceId} (${device.deviceType || "unknown type"})`
+        );
+        return;
+      }
+
+      // For other errors, log as error
       console.error(
         "[DeviceMonitor] ❌ Console fetch failed:",
         response.status,
-        await response.text()
+        errorText
       );
       return;
     }

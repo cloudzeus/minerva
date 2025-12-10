@@ -207,6 +207,11 @@ model MilesightDeviceCache {
   description String?  @db.Text
   tag         String?
   
+  // Custom sensor names (for TS302 and similar devices)
+  sensorNameLeft   String?  // Custom name for temperature_left sensor
+  sensorNameRight  String?  // Custom name for temperature_right sensor
+  sensorNames      String?  @db.Text // JSON object for all custom sensor names
+  
   // Device status
   lastStatus  String?  // e.g. "ONLINE", "OFFLINE"
   deviceType  String?  // Device model/type
@@ -287,7 +292,10 @@ model TemperatureAlert {
   id               String   @id @default(cuid())
   
   // Device reference
-  deviceId         String   @unique
+  deviceId         String
+  
+  // Sensor channel (null for single-sensor devices like TS301, "CH1" or "CH2" for TS302)
+  sensorChannel    String?  // e.g., "CH1", "CH2", or null for single sensor
   
   // Alert thresholds
   minTemperature   Float    // Minimum acceptable temperature
@@ -307,7 +315,9 @@ model TemperatureAlert {
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
   
+  @@unique([deviceId, sensorChannel]) // One alert per device per channel
   @@index([deviceId])
   @@index([enabled])
+  @@index([sensorChannel])
 }
 

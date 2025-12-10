@@ -271,13 +271,257 @@ export async function updateMilesightDevice(
   const responseText = await response.text();
   console.log("[Milesight Devices] Update response:", response.status, responseText);
 
+  if (response.status === 405) {
+    console.warn(
+      "[Milesight Devices] PUT not supported, attempting POST fallback endpoint"
+    );
+    return attemptMilesightUpdateFallback(
+      baseUrl,
+      accessToken,
+      deviceId,
+      updateData
+    );
+  }
+
   if (!response.ok) {
     throw new Error(
       `Update device failed (${response.status}): ${responseText}`
     );
   }
 
-  return JSON.parse(responseText);
+  return responseText ? JSON.parse(responseText) : { success: true };
+}
+
+/**
+ * Update device configuration / properties
+ * PUT {baseUrl}/device/openapi/v1/devices/{deviceId}/config
+ */
+export async function updateMilesightDeviceConfig(
+  baseUrl: string,
+  accessToken: string,
+  deviceId: string,
+  properties: Record<string, any>
+): Promise<any> {
+  const apiUrl = `${baseUrl}/device/openapi/v1/devices/${deviceId}/config`;
+
+  console.log("[Milesight Devices] Updating config:", deviceId, properties);
+
+  const response = await fetch(apiUrl, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify({ properties }),
+  });
+
+  const responseText = await response.text();
+  console.log("[Milesight Devices] Config update response:", response.status, responseText);
+
+  if (!response.ok) {
+    throw new Error(
+      `Update device config failed (${response.status}): ${responseText}`
+    );
+  }
+
+  return responseText ? JSON.parse(responseText) : { success: true };
+}
+
+/**
+ * Trigger a firmware update for a device
+ * POST {baseUrl}/device/openapi/v1/devices/{deviceId}/firmware
+ */
+export async function updateMilesightDeviceFirmware(
+  baseUrl: string,
+  accessToken: string,
+  deviceId: string,
+  payload: {
+    firmwareVersion: string;
+    firmwareFileId?: string;
+    releaseNotes?: string;
+  }
+): Promise<any> {
+  const apiUrl = `${baseUrl}/device/openapi/v1/devices/${deviceId}/firmware`;
+
+  console.log("[Milesight Devices] Triggering firmware update:", {
+    deviceId,
+    payload,
+  });
+
+  const response = await fetch(apiUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(payload),
+  });
+
+  const responseText = await response.text();
+  console.log("[Milesight Devices] Firmware update response:", response.status, responseText);
+
+  if (!response.ok) {
+    throw new Error(
+      `Firmware update failed (${response.status}): ${responseText}`
+    );
+  }
+
+  return responseText ? JSON.parse(responseText) : { success: true };
+}
+
+/**
+ * Reboot TS302 device via downlink command
+ * Sends reboot command (ff10ff) through LoRaWAN downlink via UG65 gateway
+ * POST {baseUrl}/device/openapi/v1/devices/{deviceId}/downlink
+ * or POST {baseUrl}/lora/openapi/v1/devices/{deviceId}/downlink
+ */
+export async function rebootTS302Device(
+  baseUrl: string,
+  accessToken: string,
+  deviceId: string,
+  devEUI?: string | null
+): Promise<any> {
+  // TS302 reboot command: ff10ff
+  // ff = reserved byte, 10 = reboot command type, ff = reserved byte
+  const rebootCommand = "ff10ff";
+  
+  // Convert hex string to base64 for API
+  const commandBytes = Buffer.from(rebootCommand, "hex");
+  const commandBase64 = commandBytes.toString("base64");
+
+  console.log("[Milesight Devices] Sending TS302 reboot command:", {
+    deviceId,
+    devEUI,
+    command: rebootCommand,
+    base64: commandBase64,
+  });
+
+  // Try multiple possible downlink endpoints and payload formats
+  const endpointConfigs: Array<{ url: string; payload: any }> = [];
+
+  // Try different endpoint patterns
+  const baseEndpoints = [
+    { path: `/data/openapi/v1/devices/${deviceId}/downlink`, useDevEUI: false },
+    { path: `/lora/openapi/v1/devices/${deviceId}/downlink`, useDevEUI: false },
+    { path: `/device/openapi/v1/devices/${deviceId}/downlink`, useDevEUI: false },
+    { path: `/device/openapi/v1/devices/${deviceId}/commands`, useDevEUI: false },
+  ];
+
+  if (devEUI) {
+    baseEndpoints.push({ path: `/lora/openapi/v1/devices/${devEUI}/downlink`, useDevEUI: true });
+    baseEndpoints.push({ path: `/data/openapi/v1/devices/${devEUI}/downlink`, useDevEUI: true });
+  }
+
+  // Generate all combinations of endpoints and payload formats
+  for (const endpoint of baseEndpoints) {
+    const url = `${baseUrl}${endpoint.path}`;
+    
+    // Format 1: fPort + data (base64)
+    endpointConfigs.push({
+      url,
+      payload: {
+        fPort: 85,
+        data: commandBase64,
+        ...(endpoint.useDevEUI && devEUI ? { devEUI } : {}),
+      },
+    });
+
+    // Format 2: fPort + payload (base64)
+    endpointConfigs.push({
+      url,
+      payload: {
+        fPort: 85,
+        payload: commandBase64,
+        ...(endpoint.useDevEUI && devEUI ? { devEUI } : {}),
+      },
+    });
+
+    // Format 3: port + data (base64)
+    endpointConfigs.push({
+      url,
+      payload: {
+        port: 85,
+        data: commandBase64,
+        ...(endpoint.useDevEUI && devEUI ? { devEUI } : {}),
+      },
+    });
+
+    // Format 4: fPort + data (hex string)
+    endpointConfigs.push({
+      url,
+      payload: {
+        fPort: 85,
+        data: rebootCommand,
+        encoding: "hex",
+        ...(endpoint.useDevEUI && devEUI ? { devEUI } : {}),
+      },
+    });
+
+    // Format 5: deviceId + fPort + data (for device endpoints)
+    if (!endpoint.useDevEUI) {
+      endpointConfigs.push({
+        url,
+        payload: {
+          deviceId,
+          fPort: 85,
+          data: commandBase64,
+        },
+      });
+    }
+  }
+
+  let lastError: Error | null = null;
+  for (let i = 0; i < endpointConfigs.length; i++) {
+    const { url: apiUrl, payload } = endpointConfigs[i];
+    try {
+
+      const response = await fetch(apiUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const responseText = await response.text();
+      console.log("[Milesight Devices] Downlink attempt:", {
+        url: apiUrl,
+        status: response.status,
+        payload: JSON.stringify(payload),
+        response: responseText,
+      });
+
+      if (response.ok) {
+        console.log("[Milesight Devices] ✅ Reboot command sent successfully");
+        return responseText ? JSON.parse(responseText) : { success: true };
+      }
+
+      // If 404, try next endpoint
+      if (response.status === 404) {
+        continue;
+      }
+
+      // If parameter error, the endpoint exists but format is wrong - try next format
+      if (response.status === 400 && responseText.includes("parameter")) {
+        continue;
+      }
+
+      // For other errors, save and try next
+      lastError = new Error(
+        `Reboot command failed (${response.status}): ${responseText}`
+      );
+    } catch (error: any) {
+      lastError = error;
+      // Continue to next endpoint unless it's the last one
+      if (i === endpointConfigs.length - 1) {
+        throw error;
+      }
+    }
+  }
+
+  // If all endpoints failed, throw informative error
+  throw lastError || new Error("Reboot command failed: No supported downlink endpoint found. Ensure the device is a TS302 and has a valid DevEUI configured. The Milesight API may not support programmatic downlink commands, or the endpoint format may differ.");
 }
 
 /**
@@ -320,8 +564,23 @@ export async function deleteMilesightDevice(
 export function mapMilesightDeviceToCache(device: any) {
   // Milesight uses different field names than expected
   const deviceId = device.deviceId || device.id;
-  const status = device.connectStatus || device.status || device.onlineStatus || null;
+  const rawStatus = device.connectStatus || device.status || device.onlineStatus || null;
   const deviceType = device.model || device.deviceType || device.type || null;
+  
+  // Normalize status to uppercase ONLINE/OFFLINE
+  let status: string | null = null;
+  if (rawStatus) {
+    const normalized = String(rawStatus).toUpperCase().trim();
+    // Handle various status formats from Milesight
+    if (normalized === "ONLINE" || normalized === "1" || normalized === "TRUE" || normalized === "CONNECTED") {
+      status = "ONLINE";
+    } else if (normalized === "OFFLINE" || normalized === "0" || normalized === "FALSE" || normalized === "DISCONNECTED") {
+      status = "OFFLINE";
+    } else {
+      // Preserve original if it's already a valid format
+      status = normalized;
+    }
+  }
   
   // Handle tag - it can be array or string
   let tag = null;
@@ -350,5 +609,49 @@ export function mapMilesightDeviceToCache(device: any) {
     deviceType,
     lastSyncAt: new Date(),
   };
+}
+
+async function attemptMilesightUpdateFallback(
+  baseUrl: string,
+  accessToken: string,
+  deviceId: string,
+  updateData: {
+    name?: string;
+    description?: string;
+    tag?: string;
+  }
+) {
+  const fallbackUrl = `${baseUrl}/device/openapi/v1/devices/update`;
+  const fallbackPayload = {
+    deviceId,
+    id: deviceId,
+    ...updateData,
+  };
+
+  console.log("[Milesight Devices] Fallback update payload:", fallbackPayload);
+
+  const fallbackResponse = await fetch(fallbackUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${accessToken}`,
+    },
+    body: JSON.stringify(fallbackPayload),
+  });
+
+  const fallbackText = await fallbackResponse.text();
+  console.log(
+    "[Milesight Devices] Fallback update response:",
+    fallbackResponse.status,
+    fallbackText
+  );
+
+  if (!fallbackResponse.ok) {
+    throw new Error(
+      `Update device failed via fallback (${fallbackResponse.status}): ${fallbackText}`
+    );
+  }
+
+  return fallbackText ? JSON.parse(fallbackText) : { success: true };
 }
 

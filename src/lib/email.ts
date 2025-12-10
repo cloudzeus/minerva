@@ -441,3 +441,218 @@ export async function sendDeviceRecoveryEmail(alert: DeviceRecoveryAlertEmail) {
   }
 }
 
+export interface OfflineDeviceInfo {
+  deviceId: string;
+  name: string;
+  sn: string;
+  deviceType: string;
+  lastSyncAt: Date;
+}
+
+export interface OfflineDeviceNotificationEmail {
+  devices: OfflineDeviceInfo[];
+  recipientEmail: string;
+}
+
+/**
+ * Send offline device notification email via Brevo
+ */
+export async function sendOfflineDeviceNotificationEmail(
+  notification: OfflineDeviceNotificationEmail
+) {
+  try {
+    const brevoApiKey = process.env.BREVO_KEY;
+    const fromEmail = process.env.BREVO_FROM_EMAIL || "alerts@minerva.wwa.gr";
+    const fromName = process.env.BREVO_FROM_NAME || "MINERVA Alerts";
+
+    if (!brevoApiKey) {
+      console.error("[Email Service] BREVO_KEY not configured");
+      return {
+        success: false,
+        error: "Email service not configured (missing BREVO_KEY)",
+      };
+    }
+
+    console.log("[Email Service] Sending offline device notification via Brevo:", {
+      deviceCount: notification.devices.length,
+      recipient: notification.recipientEmail,
+    });
+
+    // Initialize Brevo API
+    const apiInstance = new brevo.TransactionalEmailsApi();
+    apiInstance.setApiKey(
+      brevo.TransactionalEmailsApiApiKeys.apiKey,
+      brevoApiKey
+    );
+
+    const subject = `⚠️ ${notification.devices.length} Device(s) Offline - MINERVA`;
+    const htmlContent = generateOfflineDeviceEmailBody(notification);
+
+    // Prepare email
+    const sendSmtpEmail = new brevo.SendSmtpEmail();
+    sendSmtpEmail.subject = subject;
+    sendSmtpEmail.htmlContent = htmlContent;
+    sendSmtpEmail.sender = {
+      name: fromName,
+      email: fromEmail,
+    };
+    sendSmtpEmail.to = [
+      {
+        email: notification.recipientEmail,
+        name: notification.recipientEmail.split("@")[0],
+      },
+    ];
+
+    // Send email via Brevo
+    const response = await apiInstance.sendTransacEmail(sendSmtpEmail);
+
+    console.log("[Email Service] ✅ Offline device notification sent successfully via Brevo");
+
+    return {
+      success: true,
+      emailsSent: 1,
+    };
+  } catch (error: any) {
+    console.error("[Email Service] Failed to send offline device notification via Brevo:", error);
+    return {
+      success: false,
+      error: error.message || "Failed to send email",
+    };
+  }
+}
+
+/**
+ * Generate HTML email body for offline device notification
+ */
+function generateOfflineDeviceEmailBody(notification: OfflineDeviceNotificationEmail): string {
+  const deviceCount = notification.devices.length;
+  const isPlural = deviceCount > 1;
+
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>Offline Device Alert - MINERVA</title>
+  <style>
+    @media only screen and (max-width: 600px) {
+      .email-container {
+        width: 100% !important;
+        padding: 10px !important;
+      }
+    }
+  </style>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f3f4f6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+  <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f3f4f6; padding: 20px 0;">
+    <tr>
+      <td align="center">
+        <!-- Main Container -->
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" class="email-container" style="max-width: 600px; background-color: #ffffff; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+          
+          <!-- Header with Gradient -->
+          <tr>
+            <td style="background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); padding: 40px 30px; text-align: center;">
+              <h1 style="color: #ffffff; margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.5px;">
+                ⚠️ Device Offline Alert
+              </h1>
+              <p style="color: rgba(255, 255, 255, 0.95); margin: 8px 0 0 0; font-size: 15px; font-weight: 500;">
+                MINERVA Device Monitoring System
+              </p>
+            </td>
+          </tr>
+
+          <!-- Alert Banner -->
+          <tr>
+            <td style="padding: 0;">
+              <div style="background-color: #fef2f2; border-left: 5px solid #ef4444; padding: 20px 30px; margin: 0;">
+                <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
+                  <tr>
+                    <td style="vertical-align: middle;">
+                      <p style="margin: 0; font-size: 18px; font-weight: 700; color: #ef4444; line-height: 1.4;">
+                        ${deviceCount} Device${isPlural ? "s" : ""} Currently Offline
+                      </p>
+                      <p style="margin: 8px 0 0 0; font-size: 14px; color: #6b7280; line-height: 1.5;">
+                        The following device${isPlural ? "s have" : " has"} lost connection to the Milesight platform.
+                      </p>
+                    </td>
+                  </tr>
+                </table>
+              </div>
+            </td>
+          </tr>
+
+          <!-- Device List -->
+          <tr>
+            <td style="padding: 30px;">
+              <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="border-collapse: separate; border-spacing: 0;">
+                <tr>
+                  <td colspan="3" style="padding: 0 0 15px 0;">
+                    <p style="margin: 0; font-size: 16px; font-weight: 700; color: #111827;">
+                      Offline Devices
+                    </p>
+                  </td>
+                </tr>
+                ${notification.devices
+                  .map(
+                    (device, index) => `
+                <tr style="border-bottom: ${index < notification.devices.length - 1 ? "1px solid #e5e7eb;" : "none;"}">
+                  <td style="padding: 14px 0; font-weight: 600; color: #6b7280; font-size: 14px; width: 30%;">
+                    Device Name
+                  </td>
+                  <td colspan="2" style="padding: 14px 0; color: #111827; font-size: 14px; font-weight: 500;">
+                    ${device.name}
+                  </td>
+                </tr>
+                <tr style="border-bottom: ${index < notification.devices.length - 1 ? "1px solid #e5e7eb;" : "none;"}">
+                  <td style="padding: 14px 0; font-weight: 600; color: #6b7280; font-size: 14px;">
+                    Serial Number
+                  </td>
+                  <td colspan="2" style="padding: 14px 0; color: #111827; font-size: 14px; font-family: monospace;">
+                    ${device.sn}
+                  </td>
+                </tr>
+                <tr style="border-bottom: ${index < notification.devices.length - 1 ? "1px solid #e5e7eb;" : "none;"}">
+                  <td style="padding: 14px 0; font-weight: 600; color: #6b7280; font-size: 14px;">
+                    Device Type
+                  </td>
+                  <td colspan="2" style="padding: 14px 0; color: #111827; font-size: 14px;">
+                    ${device.deviceType}
+                  </td>
+                </tr>
+                <tr style="border-bottom: ${index < notification.devices.length - 1 ? "1px solid #e5e7eb;" : "none;"}">
+                  <td style="padding: 14px 0; font-weight: 600; color: #6b7280; font-size: 14px;">
+                    Last Sync
+                  </td>
+                  <td colspan="2" style="padding: 14px 0; color: #111827; font-size: 14px;">
+                    ${new Date(device.lastSyncAt).toLocaleString()}
+                  </td>
+                </tr>
+                ${index < notification.devices.length - 1 ? '<tr><td colspan="3" style="padding: 10px 0;"></td></tr>' : ""}
+                `
+                  )
+                  .join("")}
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #f9fafb; padding: 20px 30px; text-align: center; border-top: 1px solid #e5e7eb;">
+              <p style="margin: 0; font-size: 12px; color: #6b7280; line-height: 1.5;">
+                This is an automated notification from MINERVA Device Monitoring System.<br>
+                Please check the device connection and Milesight platform status.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `;
+}
+

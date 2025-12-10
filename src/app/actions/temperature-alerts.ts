@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 
 export interface TemperatureAlertSettings {
   deviceId: string;
+  sensorChannel?: string | null; // "CH1", "CH2", or null for single sensor
   minTemperature: number;
   maxTemperature: number;
   emailRecipients: string[];
@@ -16,23 +17,42 @@ export interface TemperatureAlertSettings {
 
 /**
  * Get temperature alert settings for a device
+ * Returns all alerts for the device (CH1, CH2, or single sensor)
  */
-export async function getTemperatureAlert(deviceId: string) {
+export async function getTemperatureAlert(deviceId: string, sensorChannel?: string | null) {
   await requireRole([Role.ADMIN, Role.MANAGER]);
 
   try {
-    const alert = await prisma.temperatureAlert.findUnique({
-      where: { deviceId },
-    });
+    if (sensorChannel !== undefined) {
+      // Get specific channel alert
+      const alert = await prisma.temperatureAlert.findUnique({
+        where: { 
+          deviceId_sensorChannel: {
+            deviceId,
+            sensorChannel: sensorChannel || null,
+          }
+        },
+      });
 
-    if (!alert) {
-      return null;
+      if (!alert) {
+        return null;
+      }
+
+      return {
+        ...alert,
+        emailRecipients: JSON.parse(alert.emailRecipients),
+      };
+    } else {
+      // Get all alerts for the device
+      const alerts = await prisma.temperatureAlert.findMany({
+        where: { deviceId },
+      });
+
+      return alerts.map(alert => ({
+        ...alert,
+        emailRecipients: JSON.parse(alert.emailRecipients),
+      }));
     }
-
-    return {
-      ...alert,
-      emailRecipients: JSON.parse(alert.emailRecipients),
-    };
   } catch (error: any) {
     console.error("[Temperature Alert] Failed to get alert:", error);
     throw new Error("Failed to retrieve alert settings");
@@ -67,9 +87,15 @@ export async function saveTemperatureAlert(settings: TemperatureAlertSettings) {
     }
 
     const alert = await prisma.temperatureAlert.upsert({
-      where: { deviceId: settings.deviceId },
+      where: { 
+        deviceId_sensorChannel: {
+          deviceId: settings.deviceId,
+          sensorChannel: settings.sensorChannel || null,
+        }
+      },
       create: {
         deviceId: settings.deviceId,
+        sensorChannel: settings.sensorChannel || null,
         minTemperature: settings.minTemperature,
         maxTemperature: settings.maxTemperature,
         emailRecipients: JSON.stringify(emails),
@@ -109,12 +135,17 @@ export async function saveTemperatureAlert(settings: TemperatureAlertSettings) {
 /**
  * Delete temperature alert
  */
-export async function deleteTemperatureAlert(deviceId: string) {
+export async function deleteTemperatureAlert(deviceId: string, sensorChannel?: string | null) {
   await requireRole([Role.ADMIN, Role.MANAGER]);
 
   try {
     await prisma.temperatureAlert.delete({
-      where: { deviceId },
+      where: { 
+        deviceId_sensorChannel: {
+          deviceId,
+          sensorChannel: sensorChannel || null,
+        }
+      },
     });
 
     revalidatePath("/admin");

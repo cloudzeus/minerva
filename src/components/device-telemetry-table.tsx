@@ -48,7 +48,7 @@ export function DeviceTelemetryTable({ telemetryData }: DeviceTelemetryTableProp
                 {formatDateTime(new Date(Number(telemetry.dataTimestamp)))}
               </TableCell>
               <TableCell>
-                <Badge variant="outline" className="text-xs">
+                <Badge variant="outline" className="text-[8px]">
                   {telemetry.dataType}
                 </Badge>
               </TableCell>
