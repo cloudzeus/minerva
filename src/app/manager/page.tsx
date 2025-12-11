@@ -22,7 +22,7 @@ async function getManagerStats() {
     totalGateways,
     onlineGateways,
     recentTelemetry,
-    devices,
+    devicesRaw,
   ] = await Promise.all([
     prisma.user.count({ where: { role: Role.EMPLOYEE } }),
     prisma.activityLog.count(),
@@ -51,6 +51,18 @@ async function getManagerStats() {
       ],
     }),
   ]);
+
+  // Sort devices: displayOrder 1, 2, 3, 4... then null/0 values last
+  const devices = devicesRaw.sort((a, b) => {
+    // Treat null or 0 as "unset" - they appear last
+    const orderA = (a.displayOrder && a.displayOrder > 0) ? a.displayOrder : 9999;
+    const orderB = (b.displayOrder && b.displayOrder > 0) ? b.displayOrder : 9999;
+    if (orderA !== orderB) {
+      return orderA - orderB;
+    }
+    // If same order, sort by lastSyncAt desc
+    return b.lastSyncAt.getTime() - a.lastSyncAt.getTime();
+  });
 
   // Calculate averages from latest telemetry
   const latestByDevice = new Map();
