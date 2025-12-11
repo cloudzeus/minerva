@@ -34,6 +34,8 @@ import { mapMilesightDeviceToCache } from "@/lib/milesight-devices";
 import { DeviceFirmwareUpdater } from "@/components/device-firmware-updater";
 import { DeviceConfigEditor } from "@/components/device-config-editor";
 import { DeviceSensorNamesEditor } from "@/components/device-sensor-names-editor";
+import { DeviceSensorOrderEditor } from "@/components/device-sensor-order-editor";
+import { DeviceDisplayOrderEditor } from "@/components/device-display-order-editor";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 type DeviceWithTelemetry = MilesightDeviceCache & {
@@ -206,10 +208,35 @@ export default async function DeviceDetailPage({
     asNumber(latestSensorPayload?.humidity) ??
     asNumber(latestSensorPayload?.hum) ??
     (latestTelemetry?.humidity ?? null);
-  const batteryValue =
-    asNumber(latestSensorPayload?.battery) ??
-    asNumber(latestSensorPayload?.battery_level) ??
-    (latestTelemetry?.battery ?? null);
+  
+  // Search through all telemetry data to find the latest battery value
+  // (battery might not be in the latest reading, so check all records)
+  let batteryValue: number | null = null;
+  for (const reading of telemetryData) {
+    const sensorData = reading.sensorData 
+      ? safeJsonParse<Record<string, unknown>>(reading.sensorData)
+      : null;
+    
+    // Check sensorData first
+    if (sensorData) {
+      const batteryFromSensor = 
+        asNumber(sensorData.battery) ??
+        asNumber(sensorData.battery_level) ??
+        asNumber(sensorData.batteryLevel) ??
+        asNumber(sensorData.electricity);
+      
+      if (batteryFromSensor !== null) {
+        batteryValue = batteryFromSensor;
+        break; // Found battery value, use it
+      }
+    }
+    
+    // Fallback to database battery field
+    if (reading.battery !== null && reading.battery !== undefined) {
+      batteryValue = reading.battery;
+      break; // Found battery value, use it
+    }
+  }
 
   // Normalize status to uppercase for consistent display
   const rawStatus = device.lastStatus || liveDeviceData?.connectStatus || null;
@@ -401,6 +428,26 @@ export default async function DeviceDetailPage({
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="space-y-2 border-b pb-4">
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Dashboard Display Order
+                  </p>
+                  <DeviceDisplayOrderEditor
+                    deviceId={device.deviceId}
+                    deviceName={device.name || device.deviceId}
+                    currentDisplayOrder={device.displayOrder}
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Control the order in which this device appears on dashboard cards. Lower numbers appear first.
+                </p>
+                {device.displayOrder !== null && (
+                  <p className="text-xs font-medium">
+                    Current order: <span className="font-mono">{device.displayOrder}</span>
+                  </p>
+                )}
+              </div>
               <div className="grid gap-4">
                 {overviewFields.map((field) => (
                   <div key={field.label} className="space-y-1">
@@ -464,6 +511,37 @@ export default async function DeviceDetailPage({
                       Using default names: "CH1" and "CH2"
                     </p>
                   )}
+                </div>
+              )}
+              {telemetryData.length > 0 && (
+                <div className="space-y-2 border-t pt-4">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-medium text-muted-foreground">
+                      Sensor Display Order
+                    </p>
+                    <DeviceSensorOrderEditor
+                      deviceId={device.deviceId}
+                      currentOrder={device.sensorDisplayOrder ? JSON.parse(device.sensorDisplayOrder) : null}
+                      availableProperties={(() => {
+                        const props = new Set<string>();
+                        telemetryData.forEach((d) => {
+                          if (d.sensorData) {
+                            const sensorData = JSON.parse(d.sensorData);
+                            Object.keys(sensorData).forEach((key) => {
+                              const value = sensorData[key];
+                              if (typeof value === "number" && key.toLowerCase() !== "mutation" && key.toLowerCase() !== "temperature") {
+                                props.add(key);
+                              }
+                            });
+                          }
+                        });
+                        return Array.from(props);
+                      })()}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Customize the order in which sensor properties appear in telemetry cards
+                  </p>
                 </div>
               )}
             </CardContent>
@@ -567,13 +645,46 @@ export default async function DeviceDetailPage({
                   <FaChartLine className="h-4 w-4 text-purple-500" />
                   Device Insights
                 </CardTitle>
-                <TabsList>
-                  <TabsTrigger value="telemetry">Telemetry</TabsTrigger>
-                  <TabsTrigger value="logs">Recent Logs</TabsTrigger>
-                </TabsList>
+                <div className="flex items-center gap-2">
+                  {telemetryData.length > 0 && (
+                    <DeviceSensorOrderEditor
+                      deviceId={device.deviceId}
+                      currentOrder={device.sensorDisplayOrder ? JSON.parse(device.sensorDisplayOrder) : null}
+                      availableProperties={(() => {
+                        const props = new Set<string>();
+                        telemetryData.forEach((d) => {
+                          if (d.sensorData) {
+                            const sensorData = JSON.parse(d.sensorData);
+                            Object.keys(sensorData).forEach((key) => {
+                              const value = sensorData[key];
+                              if (typeof value === "number" && key.toLowerCase() !== "mutation" && key.toLowerCase() !== "temperature") {
+                                props.add(key);
+                              }
+                            });
+                          }
+                          // Also include database battery field
+                          if (d.battery !== null && d.battery !== undefined) {
+                            const hasBattery = Array.from(props).some(p => 
+                              p.toLowerCase().includes("battery") || p === "electricity"
+                            );
+                            if (!hasBattery) {
+                              props.add("battery");
+                            }
+                          }
+                        });
+                        return Array.from(props);
+                      })()}
+                    />
+                  )}
+                  <TabsList>
+                    <TabsTrigger value="telemetry">Telemetry</TabsTrigger>
+                    <TabsTrigger value="logs">Recent Logs</TabsTrigger>
+                  </TabsList>
+                </div>
               </div>
               <p className="text-[12px] text-muted-foreground">
                 Switch between latest telemetry records and webhook activity for this device.
+                {telemetryData.length > 0 && " Use 'Edit Display Order' to customize sensor card layout."}
               </p>
             </CardHeader>
             <CardContent className="pt-6">

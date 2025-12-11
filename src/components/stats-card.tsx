@@ -20,10 +20,10 @@ export function StatsCard({
   return (
     <Card className="border-border/40 shadow-sm transition-all hover:shadow-md" style={{ backgroundColor: '#dbffcc' }}>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-        <CardTitle className="text-xs font-medium text-muted-foreground">
+        <CardTitle className="text-[9px] font-medium uppercase text-muted-foreground">
           {title}
         </CardTitle>
-        <Icon className={`h-3.5 w-3.5 ${iconColor}`} />
+        <Icon className={`h-3 w-3 ${iconColor}`} />
       </CardHeader>
       <CardContent>
         <div className="text-xl font-bold">{value}</div>

@@ -36,7 +36,10 @@ async function getDashboardStats() {
       orderBy: { dataTimestamp: "desc" },
     }),
     prisma.milesightDeviceCache.findMany({
-      orderBy: { lastSyncAt: "desc" },
+      orderBy: [
+        { displayOrder: "asc" },
+        { lastSyncAt: "desc" },
+      ],
     }),
   ]);
 
@@ -159,6 +162,7 @@ export default async function AdminDashboard() {
                     userRole={user?.role}
                     sensorNameLeft={device.sensorNameLeft}
                     sensorNameRight={device.sensorNameRight}
+                    sensorDisplayOrder={device.sensorDisplayOrder ? JSON.parse(device.sensorDisplayOrder) : null}
                   />
                 );
               })}

@@ -44,6 +44,7 @@ interface DeviceTelemetryCardProps {
   userRole?: Role;
   sensorNameLeft?: string | null;
   sensorNameRight?: string | null;
+  sensorDisplayOrder?: string[] | null; // Custom display order for sensor properties
 }
 
 // Icon mapping for common sensor properties
@@ -53,6 +54,8 @@ const propertyIcons: Record<string, { icon: any; color: string; unit?: string }>
   temperature_right: { icon: FaThermometerHalf, color: "text-orange-600", unit: "°C" },
   humidity: { icon: FaTint, color: "text-blue-500", unit: "%" },
   battery: { icon: FaBatteryHalf, color: "text-green-500", unit: "%" },
+  battery_level: { icon: FaBatteryHalf, color: "text-green-500", unit: "%" },
+  batteryLevel: { icon: FaBatteryHalf, color: "text-green-500", unit: "%" },
   electricity: { icon: FaBatteryHalf, color: "text-green-500", unit: "%" },
   voltage: { icon: FaBolt, color: "text-yellow-500", unit: "V" },
   current: { icon: FaBolt, color: "text-yellow-600", unit: "A" },
@@ -74,6 +77,7 @@ export function DeviceTelemetryCard({
   userRole,
   sensorNameLeft,
   sensorNameRight,
+  sensorDisplayOrder,
 }: DeviceTelemetryCardProps) {
   const [timeRange, setTimeRange] = React.useState("24h");
   
@@ -117,28 +121,123 @@ export function DeviceTelemetryCard({
           }
         });
       }
+      
+      // Also check database battery field if sensorData doesn't have it
+      if (d.battery !== null && d.battery !== undefined) {
+        // Add battery if not already in props (check all variations)
+        const hasBattery = Array.from(props).some(p => 
+          p.toLowerCase().includes("battery") || p === "electricity"
+        );
+        if (!hasBattery) {
+          props.add("battery");
+        }
+      }
+      
+      // Also check database battery field if sensorData doesn't have it
+      if (d.battery !== null && d.battery !== undefined) {
+        // Add battery if not already in props (check all variations)
+        const hasBattery = Array.from(props).some(p => 
+          p.toLowerCase().includes("battery") || p === "electricity"
+        );
+        if (!hasBattery) {
+          props.add("battery");
+        }
+      }
     });
     
-    // Sort properties: known properties first (in order), then others alphabetically
+    // Use custom display order if provided, otherwise use default order
+    if (sensorDisplayOrder && sensorDisplayOrder.length > 0) {
+      // Filter custom order to only include properties that exist in the data
+      const orderedProps = sensorDisplayOrder.filter(prop => props.has(prop));
+      // Add any new properties that aren't in the custom order
+      const otherProps = Array.from(props).filter(prop => !sensorDisplayOrder.includes(prop)).sort();
+      const propsArray = [...orderedProps, ...otherProps];
+      console.log(`[${deviceName}] Valid properties (using custom order):`, propsArray);
+      return propsArray;
+    }
+    
+    // Default: Sort properties: known properties first (in order), then others alphabetically
     const knownProps = PROPERTY_ORDER.filter(prop => props.has(prop));
     const otherProps = Array.from(props).filter(prop => !PROPERTY_ORDER.includes(prop)).sort();
     const propsArray = [...knownProps, ...otherProps];
     
     console.log(`[${deviceName}] Valid properties (garbage filtered, ordered):`, propsArray);
     return propsArray;
-  }, [telemetryData, deviceName]);
+  }, [telemetryData, deviceName, sensorDisplayOrder]);
 
   // Get latest values for each property from database
+  // Search through all telemetry data to find the most recent non-null value for each property
   const latestValues = React.useMemo(() => {
-    if (!latestReading?.sensorData) return {};
-    return JSON.parse(latestReading.sensorData);
-  }, [latestReading]);
+    const values: Record<string, any> = {};
+    
+    // Search through telemetry data (already sorted by dataTimestamp desc) to find latest non-null values
+    for (const reading of telemetryData) {
+      if (reading.sensorData) {
+        try {
+          const sensorData = JSON.parse(reading.sensorData);
+          
+          // For each property in sensorData, use the first (latest) non-null value we find
+          Object.keys(sensorData).forEach((key) => {
+            const val = sensorData[key];
+            // Only set if we haven't found a value for this property yet and it's a valid number
+            // Note: 0 is a valid value (could be temperature), so check for null/undefined specifically
+            if (!(key in values) && val !== null && val !== undefined && typeof val === "number" && !isNaN(val)) {
+              values[key] = val;
+            }
+          });
+        } catch (e) {
+          console.error(`[${deviceName}] Failed to parse sensorData:`, e);
+        }
+      }
+      
+      // Also check database battery field if available (fallback)
+      if (reading.battery !== null && reading.battery !== undefined) {
+        // Use battery field if not already in values (check all variations)
+        const hasBattery = Object.keys(values).some(k => 
+          k.toLowerCase().includes("battery") || k === "electricity"
+        );
+        if (!hasBattery) {
+          values.battery = reading.battery;
+          break; // Found battery, no need to continue
+        }
+      }
+    }
+    
+    return values;
+  }, [telemetryData, deviceName]);
 
-  // Get battery capacity from sensor data
-  const batteryCapacity = React.useMemo(() => {
-    if (!latestReading?.sensorData) return null;
+  // Get battery percentage and capacity from sensor data - check all possible field names
+  const batteryInfo = React.useMemo(() => {
+    if (!latestReading?.sensorData) {
+      // Fallback to database field if sensorData is not available
+      if (latestReading?.battery !== null && latestReading?.battery !== undefined) {
+        return { percentage: latestReading.battery, capacity: null };
+      }
+      return { percentage: null, capacity: null };
+    }
     const sensorData = JSON.parse(latestReading.sensorData);
-    return sensorData.batteryCapacity || sensorData.battery_capacity || sensorData.capacity || null;
+    
+    // Check for battery percentage in various field names
+    const batteryPercentage = 
+      sensorData.battery ||
+      sensorData.battery_level ||
+      sensorData.batteryLevel ||
+      sensorData.electricity ||
+      latestReading?.battery ||
+      null;
+    
+    // Check for battery capacity in various field names
+    const batteryCapacity = 
+      sensorData.batteryCapacity ||
+      sensorData.battery_capacity ||
+      sensorData.batteryCapacity ||
+      sensorData.capacity ||
+      null;
+    
+    return { 
+      percentage: batteryPercentage !== null && batteryPercentage !== undefined ? Number(batteryPercentage) : null,
+      capacity: batteryCapacity !== null && batteryCapacity !== undefined ? Number(batteryCapacity) : null
+    };
   }, [latestReading]);
 
   // Prepare chart data with ALL numeric properties
@@ -252,39 +351,57 @@ export function DeviceTelemetryCard({
     },
   } satisfies ChartConfig;
 
-  // Get the top 2 most important properties to display in sensor readings
+  // Get properties to display in sensor readings - always include battery if available
   const displayProperties = React.useMemo(() => {
-    // Priority: temperature_left, temperature_right
-    const priority = ["temperature_left", "temperature_right"];
-    const sorted = allProperties
-      .filter(prop => priority.includes(prop))
-      .sort((a, b) => priority.indexOf(a) - priority.indexOf(b));
-    return sorted.slice(0, 2);
+    // Priority: temperature_left, temperature_right, then ONE battery field
+    const result: string[] = [];
+    
+    // Add temperature_left if available
+    if (allProperties.includes("temperature_left")) {
+      result.push("temperature_left");
+    }
+    
+    // Add temperature_right if available
+    if (allProperties.includes("temperature_right")) {
+      result.push("temperature_right");
+    }
+    
+    // Add ONE battery field (prefer "battery" over "battery_level" or "electricity")
+    const batteryFields = ["battery", "battery_level", "batteryLevel", "electricity"];
+    for (const batteryField of batteryFields) {
+      if (allProperties.includes(batteryField)) {
+        result.push(batteryField);
+        break; // Only add one battery field
+      }
+    }
+    
+    // Limit to top 3 to show: temp_left, temp_right, and battery
+    return result.slice(0, 3);
   }, [allProperties]);
 
   return (
     <Card className="border-border/40 shadow-sm" style={{ backgroundColor: '#e0e1e2' }}>
-      <CardHeader className="flex items-center gap-2 space-y-0 border-b py-4 sm:flex-row">
-        <div className="grid flex-1 gap-1 text-center sm:text-left">
+      <CardHeader className="space-y-3 border-b py-4">
+        {/* Device Name Row */}
+        <div className="flex items-center gap-2">
           <CardTitle className="flex items-center gap-2 text-sm">
             <FaMicrochip className="h-3.5 w-3.5 text-muted-foreground" />
             {deviceName || `Device ${deviceId}`}
           </CardTitle>
-          <div className="flex items-center gap-2">
-            <Badge
-              variant={deviceStatus === "ONLINE" ? "default" : "secondary"}
-              className="h-5 text-[8px]"
-            >
-              <FaCircle
-                className={`mr-1 h-2 w-2 ${
-                  deviceStatus === "ONLINE" ? "animate-pulse text-green-400" : "text-gray-400"
-                }`}
-              />
-              {deviceStatus}
-            </Badge>
-          </div>
+          <Badge
+            variant={deviceStatus === "ONLINE" ? "default" : "secondary"}
+            className="h-5 text-[8px]"
+          >
+            <FaCircle
+              className={`mr-1 h-2 w-2 ${
+                deviceStatus === "ONLINE" ? "animate-pulse text-green-400" : "text-gray-400"
+              }`}
+            />
+            {deviceStatus}
+          </Badge>
         </div>
-        <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+        {/* Controls Row: Export and Time Range Select */}
+        <div className="flex flex-wrap items-center gap-2">
           {canExport && (
             <ExportTelemetryButton
               deviceId={deviceId}
@@ -338,8 +455,8 @@ export function DeviceTelemetryCard({
           </div>
         ) : (
           <>
-            {/* Current Sensor Readings - Top 2 Properties */}
-            <div className="mb-4 grid grid-cols-2 gap-3">
+            {/* Current Sensor Readings - CH1, CH2, and Battery in single row */}
+            <div className="mb-4 grid grid-cols-3 gap-3">
               {displayProperties.map((prop) => {
                 const value = latestValues[prop];
                 const config = propertyIcons[prop] || {
@@ -355,6 +472,21 @@ export function DeviceTelemetryCard({
                   displayName = sensorNameLeft;
                 } else if (prop === "temperature_right" && sensorNameRight) {
                   displayName = sensorNameRight;
+                } else if (prop === "temperature_left") {
+                  displayName = "CH1";
+                } else if (prop === "temperature_right") {
+                  displayName = "CH2";
+                }
+
+                // For battery, show percentage from batteryInfo if available
+                let displayValue = value;
+                let displayUnit = config.unit || "";
+                if (prop.toLowerCase().includes("battery") || prop === "electricity") {
+                  // Use batteryInfo for consistent battery display
+                  if (batteryInfo.percentage !== null) {
+                    displayValue = batteryInfo.percentage;
+                    displayUnit = "%";
+                  }
                 }
 
                 return (
@@ -368,30 +500,15 @@ export function DeviceTelemetryCard({
                         {displayName}
                       </span>
                     </div>
-                      <div className="mt-1 text-lg font-bold">
-                      {value !== null && value !== undefined
-                        ? `${typeof value === "number" ? value.toFixed(1) : value}${config.unit || ""}`
+                    <div className="mt-1 text-lg font-bold">
+                      {displayValue !== null && displayValue !== undefined
+                        ? `${typeof displayValue === "number" ? displayValue.toFixed(displayUnit === "%" ? 0 : 1) : displayValue}${displayUnit}`
                         : "—"}
                     </div>
                   </div>
                 );
               })}
             </div>
-            
-            {/* Battery Capacity Display */}
-            {batteryCapacity !== null && (
-              <div className="mb-4 rounded-lg border border-border/40 bg-muted/50 p-3">
-                <div className="flex items-center gap-2">
-                  <FaBatteryHalf className="h-3 w-3 text-green-500" />
-                  <span className="text-xs font-medium text-muted-foreground">
-                    Battery Capacity
-                  </span>
-                </div>
-                <div className="mt-1 text-lg font-bold">
-                  {typeof batteryCapacity === "number" ? `${batteryCapacity}mAh` : batteryCapacity}
-                </div>
-              </div>
-            )}
 
             {/* Temperature Bar Chart - Multiple */}
             {chartData.length > 0 && (hasTemperatureLeft || hasTemperatureRight) ? (

@@ -11,6 +11,7 @@ interface RealtimeDeviceCardProps {
   userRole?: Role;
   sensorNameLeft?: string | null;
   sensorNameRight?: string | null;
+  sensorDisplayOrder?: string[] | null;
 }
 
 export function RealtimeDeviceCard({
@@ -23,6 +24,7 @@ export function RealtimeDeviceCard({
   userRole,
   sensorNameLeft,
   sensorNameRight,
+  sensorDisplayOrder,
 }: RealtimeDeviceCardProps) {
   // Simple pass-through - no real-time updates, just show database data
   return (
@@ -36,6 +38,7 @@ export function RealtimeDeviceCard({
       userRole={userRole}
       sensorNameLeft={sensorNameLeft}
       sensorNameRight={sensorNameRight}
+      sensorDisplayOrder={sensorDisplayOrder}
     />
   );
 }

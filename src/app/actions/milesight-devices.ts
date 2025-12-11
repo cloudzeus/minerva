@@ -263,23 +263,62 @@ export async function updateDevice(deviceId: string, formData: FormData) {
   const name = formData.get("name") as string | null;
   const description = formData.get("description") as string | null;
   const tag = formData.get("tag") as string | null;
+  const displayOrderStr = formData.get("displayOrder") as string | null;
+  const displayOrder = displayOrderStr !== null ? parseInt(displayOrderStr) : null;
+
+  // Fetch current device to compare values and only update what changed
+  const currentDevice = await prisma.milesightDeviceCache.findUnique({
+    where: { deviceId },
+    select: { name: true, description: true, tag: true, displayOrder: true },
+  });
+
+  if (!currentDevice) {
+    return { success: false, error: "Device not found" };
+  }
+
+  // Compare submitted values with current values to determine what actually changed
+  const updateData: any = {};
+  if (name !== null && name.trim() !== "" && name.trim() !== (currentDevice.name || "")) {
+    updateData.name = name.trim();
+  }
+  if (description !== null && description.trim() !== (currentDevice.description || "")) {
+    updateData.description = description.trim();
+  }
+  if (tag !== null && tag.trim() !== (currentDevice.tag || "")) {
+    updateData.tag = tag.trim();
+  }
+
+  // Separate local-only fields from Milesight API fields
+  // displayOrder is LOCAL-ONLY and should NEVER be sent to Milesight API
+  const hasMilesightUpdates = Object.keys(updateData).length > 0;
+  const currentDisplayOrder = currentDevice.displayOrder ?? 0;
+  const hasLocalUpdates = displayOrder !== null && !isNaN(displayOrder) && displayOrder !== currentDisplayOrder;
 
   try {
-    const { baseUrl, accessToken } = await getMilesightAuth();
+    // Step 1: Update Milesight API (only if there are actual changed Milesight fields)
+    // NOTE: displayOrder is intentionally NOT included - it's local-only
+    // Skip Milesight API entirely if only displayOrder is being updated
+    if (hasMilesightUpdates) {
+      const { baseUrl, accessToken } = await getMilesightAuth();
 
-    const updateData: any = {};
-    if (name) updateData.name = name;
-    if (description) updateData.description = description;
-    if (tag) updateData.tag = tag;
+      const response = await updateMilesightDevice(baseUrl, accessToken, deviceId, updateData);
 
-    const response = await updateMilesightDevice(baseUrl, accessToken, deviceId, updateData);
+      // Update local cache with Milesight response data
+      if (response.data) {
+        const cacheData = mapMilesightDeviceToCache(response.data);
+        await prisma.milesightDeviceCache.update({
+          where: { deviceId: cacheData.deviceId },
+          data: cacheData,
+        });
+      }
+    }
 
-    // Update local cache
-    if (response.data) {
-      const cacheData = mapMilesightDeviceToCache(response.data);
+    // Step 2: Update local-only fields (displayOrder) - always done separately
+    // This is independent of Milesight API and should work even if API update fails
+    if (hasLocalUpdates) {
       await prisma.milesightDeviceCache.update({
-        where: { deviceId: cacheData.deviceId },
-        data: cacheData,
+        where: { deviceId },
+        data: { displayOrder },
       });
     }
 
@@ -294,9 +333,27 @@ export async function updateDevice(deviceId: string, formData: FormData) {
 
     revalidatePath("/admin/devices/milesight");
     revalidatePath(`/admin/devices/milesight/${deviceId}`);
+    revalidatePath("/admin");
+    revalidatePath("/employee");
+    revalidatePath("/manager");
     return { success: true };
   } catch (error: any) {
     console.error("[Milesight Devices] Update error:", error);
+    
+    // Even if Milesight API fails, try to update local displayOrder if needed
+    // This ensures displayOrder updates work independently of Milesight API
+    if (hasLocalUpdates) {
+      try {
+        await prisma.milesightDeviceCache.update({
+          where: { deviceId },
+          data: { displayOrder },
+        });
+        console.log("[Milesight Devices] Updated displayOrder locally despite API error");
+      } catch (localError: any) {
+        console.error("[Milesight Devices] Failed to update local displayOrder:", localError);
+      }
+    }
+    
     return { success: false, error: error.message };
   }
 }
@@ -601,6 +658,104 @@ export async function updateDeviceSensorNames(
     return { success: true };
   } catch (error: any) {
     console.error("[Milesight Devices] Sensor names update error:", error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Update device sensor display order
+ * SECURITY: ADMIN-ONLY
+ */
+export async function updateDeviceSensorDisplayOrder(
+  deviceId: string,
+  displayOrder: string[]
+) {
+  const currentUser = await requireRole(Role.ADMIN);
+
+  try {
+    await prisma.milesightDeviceCache.update({
+      where: { deviceId },
+      data: {
+        sensorDisplayOrder: JSON.stringify(displayOrder),
+      },
+    });
+
+    // Try to create activity log, but don't fail if user doesn't exist
+    try {
+      const userExists = await prisma.user.findUnique({
+        where: { id: currentUser.id },
+        select: { id: true },
+      });
+
+      if (userExists) {
+        await prisma.activityLog.create({
+          data: {
+            userId: currentUser.id,
+            type: "PROFILE_UPDATED",
+            description: `Updated sensor display order for device: ${deviceId}`,
+          },
+        });
+      }
+    } catch (logError: any) {
+      console.error("[Milesight Devices] Failed to create activity log:", logError);
+    }
+
+    revalidatePath("/admin/devices/milesight");
+    revalidatePath(`/admin/devices/milesight/${deviceId}`);
+    revalidatePath(`/devices/${deviceId}`);
+    return { success: true };
+  } catch (error: any) {
+    console.error("[Milesight Devices] Sensor display order update error:", error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Update device display order for dashboard cards
+ * SECURITY: ADMIN-ONLY
+ */
+export async function updateDeviceDisplayOrder(
+  deviceId: string,
+  displayOrder: number
+) {
+  const currentUser = await requireRole(Role.ADMIN);
+
+  try {
+    await prisma.milesightDeviceCache.update({
+      where: { deviceId },
+      data: {
+        displayOrder,
+      },
+    });
+
+    // Try to create activity log, but don't fail if user doesn't exist
+    try {
+      const userExists = await prisma.user.findUnique({
+        where: { id: currentUser.id },
+        select: { id: true },
+      });
+
+      if (userExists) {
+        await prisma.activityLog.create({
+          data: {
+            userId: currentUser.id,
+            type: "PROFILE_UPDATED",
+            description: `Updated display order for device: ${deviceId} to ${displayOrder}`,
+          },
+        });
+      }
+    } catch (logError: any) {
+      console.error("[Milesight Devices] Failed to create activity log:", logError);
+    }
+
+    revalidatePath("/admin/devices/milesight");
+    revalidatePath(`/admin/devices/milesight/${deviceId}`);
+    revalidatePath("/admin");
+    revalidatePath("/employee");
+    revalidatePath("/manager");
+    return { success: true };
+  } catch (error: any) {
+    console.error("[Milesight Devices] Display order update error:", error);
     return { success: false, error: error.message };
   }
 }

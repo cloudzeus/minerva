@@ -212,6 +212,12 @@ model MilesightDeviceCache {
   sensorNameRight  String?  // Custom name for temperature_right sensor
   sensorNames      String?  @db.Text // JSON object for all custom sensor names
   
+  // Custom display order for sensor properties (JSON array of property names)
+  sensorDisplayOrder String? @db.Text // e.g. ["temperature_left", "temperature_right", "humidity", "battery"]
+  
+  // Display order for dashboard cards (lower numbers appear first)
+  displayOrder Int? @default(0)
+  
   // Device status
   lastStatus  String?  // e.g. "ONLINE", "OFFLINE"
   deviceType  String?  // Device model/type

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -23,6 +24,13 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { updateDevice } from "@/app/actions/milesight-devices";
 import { toast } from "sonner";
 import { FaSave, FaTimes } from "react-icons/fa";
@@ -32,6 +40,7 @@ const editDeviceSchema = z.object({
   name: z.string().optional().or(z.literal("")),
   description: z.string().optional().or(z.literal("")),
   tag: z.string().optional().or(z.literal("")),
+  displayOrder: z.number().int().optional().nullable(),
 });
 
 type EditDeviceFormData = z.infer<typeof editDeviceSchema>;
@@ -40,11 +49,26 @@ interface EditDeviceModalProps {
   device: MilesightDeviceCache;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  totalTSDevices?: number; // Total count of TS302/TS301 devices
 }
 
-export function EditDeviceModal({ device, open, onOpenChange }: EditDeviceModalProps) {
+export function EditDeviceModal({ device, open, onOpenChange, totalTSDevices = 1 }: EditDeviceModalProps) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
+
+  // Check if device is TS302 or TS301
+  const isTSDevice = device.deviceType?.toUpperCase().includes("TS302") || 
+                     device.deviceType?.toUpperCase().includes("TS-302") ||
+                     device.deviceType?.toUpperCase().includes("TS301") ||
+                     device.deviceType?.toUpperCase().includes("TS-301");
+
+  // Generate order options from 1 to totalTSDevices
+  const orderOptions = Array.from({ length: totalTSDevices }, (_, i) => i + 1);
+
+  // Default displayOrder: use device's current value, or 1 if not set, but ensure it's within valid range
+  const defaultDisplayOrder = device.displayOrder 
+    ? Math.max(1, Math.min(device.displayOrder, totalTSDevices))
+    : 1;
 
   const form = useForm<EditDeviceFormData>({
     resolver: zodResolver(editDeviceSchema),
@@ -52,8 +76,24 @@ export function EditDeviceModal({ device, open, onOpenChange }: EditDeviceModalP
       name: device.name || "",
       description: device.description || "",
       tag: device.tag || "",
+      displayOrder: defaultDisplayOrder,
     },
   });
+
+  // Reset form when device changes or modal opens
+  React.useEffect(() => {
+    if (open) {
+      const newDefaultDisplayOrder = device.displayOrder 
+        ? Math.max(1, Math.min(device.displayOrder, totalTSDevices))
+        : 1;
+      form.reset({
+        name: device.name || "",
+        description: device.description || "",
+        tag: device.tag || "",
+        displayOrder: newDefaultDisplayOrder,
+      });
+    }
+  }, [device, open, totalTSDevices, form]);
 
   async function onSubmit(values: EditDeviceFormData) {
     setIsLoading(true);
@@ -63,6 +103,9 @@ export function EditDeviceModal({ device, open, onOpenChange }: EditDeviceModalP
       if (values.name) formData.append("name", values.name);
       if (values.description) formData.append("description", values.description);
       if (values.tag) formData.append("tag", values.tag);
+      if (values.displayOrder !== null && values.displayOrder !== undefined) {
+        formData.append("displayOrder", values.displayOrder.toString());
+      }
 
       const result = await updateDevice(device.deviceId, formData);
 
@@ -146,6 +189,39 @@ export function EditDeviceModal({ device, open, onOpenChange }: EditDeviceModalP
                 </FormItem>
               )}
             />
+
+            {isTSDevice && (
+              <FormField
+                control={form.control}
+                name="displayOrder"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="text-xs uppercase">Dashboard Display Order</FormLabel>
+                    <FormControl>
+                      <Select
+                        value={field.value?.toString() ?? "1"}
+                        onValueChange={(value) => field.onChange(parseInt(value))}
+                      >
+                        <SelectTrigger className="text-sm">
+                          <SelectValue placeholder="Select order" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {orderOptions.map((order) => (
+                            <SelectItem key={order} value={order.toString()}>
+                              {order}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </FormControl>
+                    <p className="text-xs text-muted-foreground">
+                      Select the position (1-{totalTSDevices}) for this device on dashboard cards. Lower numbers appear first.
+                    </p>
+                    <FormMessage className="text-xs" />
+                  </FormItem>
+                )}
+              />
+            )}
 
             <div className="flex gap-2 pt-2">
               <Button type="submit" disabled={isLoading} size="sm" className="flex-1 text-xs">

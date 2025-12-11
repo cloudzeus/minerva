@@ -9,7 +9,7 @@ RUN npm ci --legacy-peer-deps --ignore-scripts
 # Builder stage
 FROM node:22-alpine AS builder
 WORKDIR /app
-ENV NODE_ENV=production
+# NOTE: NODE_ENV should NOT be set during build - only at runtime
 COPY package.json package-lock.json ./
 COPY --from=dependencies /app/node_modules ./node_modules
 COPY prisma ./prisma

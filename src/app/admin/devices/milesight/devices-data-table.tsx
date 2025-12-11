@@ -185,6 +185,17 @@ export function DevicesDataTable({ devices: initialDevices, canManage }: Devices
 
   const columns = createDeviceColumns(handleView, handleEdit, handleDeleteClick, handleCriticalToggle);
 
+  // Calculate total TS302/TS301 devices for display order dropdown
+  const totalTSDevices = devices.filter((device) => {
+    const deviceType = device.deviceType?.toUpperCase() || "";
+    return (
+      deviceType.includes("TS302") ||
+      deviceType.includes("TS-302") ||
+      deviceType.includes("TS301") ||
+      deviceType.includes("TS-301")
+    );
+  }).length;
+
   const tableColumns: ColumnDef<MilesightDeviceCache>[] = [
     {
       id: "select",
@@ -354,6 +365,7 @@ export function DevicesDataTable({ devices: initialDevices, canManage }: Devices
             setEditModalOpen(open);
             if (!open) setSelectedDevice(null);
           }}
+          totalTSDevices={totalTSDevices || 1}
         />
       )}
 
