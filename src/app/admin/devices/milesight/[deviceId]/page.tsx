@@ -94,6 +94,8 @@ function buildLiveDeviceSnapshot(liveDevice: any): DeviceWithTelemetry {
     sensorNameLeft: null,
     sensorNameRight: null,
     sensorNames: null,
+    sensorDisplayOrder: null,
+    displayOrder: null,
     lastStatus: mapped.lastStatus,
     deviceType: mapped.deviceType,
     lastSyncAt: mapped.lastSyncAt,
