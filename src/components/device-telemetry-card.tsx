@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { MilesightDeviceTelemetry, Role } from "@prisma/client";
+import { useTimeRange } from "@/lib/time-range-context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -11,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis, ReferenceLine, Label, Cell } from "recharts";
 import {
   ChartConfig,
   ChartContainer,
@@ -45,6 +46,11 @@ interface DeviceTelemetryCardProps {
   sensorNameLeft?: string | null;
   sensorNameRight?: string | null;
   sensorDisplayOrder?: string[] | null; // Custom display order for sensor properties
+  // Temperature thresholds from alert settings
+  minTemperatureCH1?: number | null;
+  maxTemperatureCH1?: number | null;
+  minTemperatureCH2?: number | null;
+  maxTemperatureCH2?: number | null;
 }
 
 // Icon mapping for common sensor properties
@@ -78,8 +84,13 @@ export function DeviceTelemetryCard({
   sensorNameLeft,
   sensorNameRight,
   sensorDisplayOrder,
+  minTemperatureCH1,
+  maxTemperatureCH1,
+  minTemperatureCH2,
+  maxTemperatureCH2,
 }: DeviceTelemetryCardProps) {
-  const [timeRange, setTimeRange] = React.useState("24h");
+  // Use shared timeRange from context so all device cards stay in sync
+  const { timeRange, setTimeRange } = useTimeRange();
   
   // Only admins and managers can export
   const canExport = userRole === Role.ADMIN || userRole === Role.MANAGER;
@@ -279,9 +290,9 @@ export function DeviceTelemetryCard({
         return now - item.timestamp <= timeRanges[timeRange];
       });
 
-  // Always show 20 buckets (each bucket renders up to 2 bars: temp left/right)
+  // Always show 10 buckets (each bucket renders up to 2 bars: temp left/right)
   const chartData = React.useMemo(() => {
-    const TARGET_BUCKETS = 20;
+    const TARGET_BUCKETS = 10;
 
     if (filteredData.length === 0) {
       return [];
@@ -339,15 +350,33 @@ export function DeviceTelemetryCard({
   const leftSensorLabel = sensorNameLeft || "CH1";
   const rightSensorLabel = sensorNameRight || "CH2";
 
-  // Chart configuration for shadcn
+  // Use Temperature Alert thresholds (not calculated averages from data)
+  const temperatureStats = React.useMemo(() => {
+    return {
+      left: {
+        min: minTemperatureCH1 ?? null,
+        max: maxTemperatureCH1 ?? null,
+      },
+      right: {
+        min: minTemperatureCH2 ?? null,
+        max: maxTemperatureCH2 ?? null,
+      },
+    };
+  }, [minTemperatureCH1, maxTemperatureCH1, minTemperatureCH2, maxTemperatureCH2]);
+
+  // Chart configuration for shadcn with min/max in labels
   const chartConfig = {
     temperature_left: {
-      label: leftSensorLabel,
+      label: hasTemperatureLeft && temperatureStats.left.min !== null && temperatureStats.left.max !== null
+        ? `${leftSensorLabel} (Min: ${temperatureStats.left.min.toFixed(1)}°C, Max: ${temperatureStats.left.max.toFixed(1)}°C)`
+        : leftSensorLabel,
       color: "hsl(var(--chart-1))",
     },
     temperature_right: {
-      label: rightSensorLabel, 
-      color: "hsl(var(--chart-2))",
+      label: hasTemperatureRight && temperatureStats.right.min !== null && temperatureStats.right.max !== null
+        ? `${rightSensorLabel} (Min: ${temperatureStats.right.min.toFixed(1)}°C, Max: ${temperatureStats.right.max.toFixed(1)}°C)`
+        : rightSensorLabel,
+      color: "#16a34a", // Intense green (green-600)
     },
   } satisfies ChartConfig;
 
@@ -489,6 +518,28 @@ export function DeviceTelemetryCard({
                   }
                 }
 
+                // Get min/max for temperature sensors from Temperature Alert Settings
+                let minMaxInfo = null;
+                if (prop === "temperature_left") {
+                  const min = minTemperatureCH1;
+                  const max = maxTemperatureCH1;
+                  if (min !== null && min !== undefined && max !== null && max !== undefined) {
+                    minMaxInfo = {
+                      min: min.toFixed(1),
+                      max: max.toFixed(1),
+                    };
+                  }
+                } else if (prop === "temperature_right") {
+                  const min = minTemperatureCH2;
+                  const max = maxTemperatureCH2;
+                  if (min !== null && min !== undefined && max !== null && max !== undefined) {
+                    minMaxInfo = {
+                      min: min.toFixed(1),
+                      max: max.toFixed(1),
+                    };
+                  }
+                }
+
                 return (
                   <div
                     key={prop}
@@ -496,9 +547,16 @@ export function DeviceTelemetryCard({
                   >
                     <div className="flex items-center gap-2">
                       <Icon className={`h-3 w-3 ${config.color}`} />
-                      <span className="text-xs font-medium text-muted-foreground">
-                        {displayName}
-                      </span>
+                      <div className="flex flex-col">
+                        <span className="text-xs font-medium text-muted-foreground">
+                          {displayName}
+                        </span>
+                        {minMaxInfo && (
+                          <span className="text-[9px] text-muted-foreground opacity-75 leading-tight">
+                            Min: {minMaxInfo.min}°C, Max: {minMaxInfo.max}°C
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="mt-1 text-lg font-bold">
                       {displayValue !== null && displayValue !== undefined
@@ -521,6 +579,7 @@ export function DeviceTelemetryCard({
                     tickMargin={10}
                     axisLine={false}
                     minTickGap={20}
+                    tick={{ fill: "#000000", fontWeight: "bold", fontSize: "14px" }}
                     tickFormatter={(value) => {
                       try {
                         const timestamp = Number(value);
@@ -536,7 +595,7 @@ export function DeviceTelemetryCard({
                                   (filteredData[0]?.timestamp || timestamp)
                               : timeRanges[timeRange],
                             1
-                          ) / 20;
+                          ) / 10;
 
                         if (bucketLabelDuration <= 60 * 60 * 1000) {
                           return format(date, "HH:mm");
@@ -558,7 +617,35 @@ export function DeviceTelemetryCard({
                       value: "Temperature (°C)",
                       angle: -90,
                       position: "insideLeft",
-                      style: { fontSize: "0.75rem" },
+                      style: { fontSize: "0.875rem", fontWeight: "bold" },
+                    }}
+                    tick={(props: any) => {
+                      const { x, y, payload } = props;
+                      const value = payload.value;
+                      
+                      // Check if this tick value matches any threshold min/max (with tolerance)
+                      const tolerance = 0.2;
+                      const isThreshold = 
+                        (hasTemperatureLeft && temperatureStats.left.min !== null && Math.abs(value - temperatureStats.left.min) < tolerance) ||
+                        (hasTemperatureLeft && temperatureStats.left.max !== null && Math.abs(value - temperatureStats.left.max) < tolerance) ||
+                        (hasTemperatureRight && temperatureStats.right.min !== null && Math.abs(value - temperatureStats.right.min) < tolerance) ||
+                        (hasTemperatureRight && temperatureStats.right.max !== null && Math.abs(value - temperatureStats.right.max) < tolerance);
+                      
+                      return (
+                        <g transform={`translate(${x},${y})`}>
+                          <text
+                            x={0}
+                            y={0}
+                            dy={4}
+                            textAnchor="end"
+                            fill={isThreshold ? "#E60000" : "#000000"}
+                            fontSize={isThreshold ? "15px" : "14px"}
+                            fontWeight="bold"
+                          >
+                            {value.toFixed(1)}
+                          </text>
+                        </g>
+                      );
                     }}
                   />
                   <ChartTooltip
@@ -574,13 +661,151 @@ export function DeviceTelemetryCard({
                       />
                     }
                   />
+                  {/* Temperature Alert Reference Lines for CH1 (temperature_left) - Orange color */}
+                  {hasTemperatureLeft && temperatureStats.left.min !== null && (
+                    <ReferenceLine
+                      y={temperatureStats.left.min}
+                      stroke="#fb923c"
+                      strokeWidth={2}
+                      strokeDasharray="5 5"
+                      label={{
+                        value: `${leftSensorLabel} Min: ${temperatureStats.left.min.toFixed(1)}°C`,
+                        position: "right",
+                        fill: "#fb923c",
+                        fontSize: 11,
+                        fontWeight: "bold",
+                      }}
+                      ifOverflow="extendDomain"
+                    />
+                  )}
+                  {hasTemperatureLeft && temperatureStats.left.max !== null && (
+                    <ReferenceLine
+                      y={temperatureStats.left.max}
+                      stroke="#fb923c"
+                      strokeWidth={2}
+                      strokeDasharray="5 5"
+                      label={{
+                        value: `${leftSensorLabel} Max: ${temperatureStats.left.max.toFixed(1)}°C`,
+                        position: "right",
+                        fill: "#fb923c",
+                        fontSize: 11,
+                        fontWeight: "bold",
+                      }}
+                      ifOverflow="extendDomain"
+                    />
+                  )}
+                  {/* Temperature Alert Reference Lines for CH2 (temperature_right) - Green color */}
+                  {hasTemperatureRight && temperatureStats.right.min !== null && (
+                    <ReferenceLine
+                      y={temperatureStats.right.min}
+                      stroke="#16a34a"
+                      strokeWidth={2}
+                      strokeDasharray="5 5"
+                      label={{
+                        value: `${rightSensorLabel} Min: ${temperatureStats.right.min.toFixed(1)}°C`,
+                        position: "right",
+                        fill: "#16a34a",
+                        fontSize: 11,
+                        fontWeight: "bold",
+                      }}
+                      ifOverflow="extendDomain"
+                    />
+                  )}
+                  {hasTemperatureRight && temperatureStats.right.max !== null && (
+                    <ReferenceLine
+                      y={temperatureStats.right.max}
+                      stroke="#16a34a"
+                      strokeWidth={2}
+                      strokeDasharray="5 5"
+                      label={{
+                        value: `${rightSensorLabel} Max: ${temperatureStats.right.max.toFixed(1)}°C`,
+                        position: "right",
+                        fill: "#16a34a",
+                        fontSize: 11,
+                        fontWeight: "bold",
+                      }}
+                      ifOverflow="extendDomain"
+                    />
+                  )}
                   {hasTemperatureLeft && (
-                    <Bar dataKey="temperature_left" fill="var(--color-temperature_left)" radius={4} />
+                    <Bar dataKey="temperature_left" fill="var(--color-temperature_left)" radius={4} maxBarSize={30}>
+                      {chartData.map((entry: any, index: number) => {
+                        const value = entry.temperature_left;
+                        let fillColor = "var(--color-temperature_left)";
+                        
+                        if (value !== null && value !== undefined) {
+                          // Check if value exceeds threshold range
+                          if (minTemperatureCH1 !== null && minTemperatureCH1 !== undefined && value < minTemperatureCH1) {
+                            fillColor = "#E60000"; // Vodafone red for below min
+                          } else if (maxTemperatureCH1 !== null && maxTemperatureCH1 !== undefined && value > maxTemperatureCH1) {
+                            fillColor = "#E60000"; // Vodafone red for above max
+                          }
+                        }
+                        
+                        return <Cell key={`cell-left-${index}`} fill={fillColor} />;
+                      })}
+                    </Bar>
                   )}
                   {hasTemperatureRight && (
-                    <Bar dataKey="temperature_right" fill="var(--color-temperature_right)" radius={4} />
+                    <Bar dataKey="temperature_right" fill="var(--color-temperature_right)" radius={4} maxBarSize={30}>
+                      {chartData.map((entry: any, index: number) => {
+                        const value = entry.temperature_right;
+                        let fillColor = "var(--color-temperature_right)"; // Intense green by default
+                        
+                        if (value !== null && value !== undefined) {
+                          // Check if value exceeds threshold range
+                          if (minTemperatureCH2 !== null && minTemperatureCH2 !== undefined && value < minTemperatureCH2) {
+                            fillColor = "#E60000"; // Vodafone red for below min
+                          } else if (maxTemperatureCH2 !== null && maxTemperatureCH2 !== undefined && value > maxTemperatureCH2) {
+                            fillColor = "#E60000"; // Vodafone red for above max
+                          }
+                        }
+                        
+                        return <Cell key={`cell-right-${index}`} fill={fillColor} />;
+                      })}
+                    </Bar>
                   )}
-                  <ChartLegend content={<ChartLegendContent />} />
+                  <ChartLegend 
+                    content={({ payload }) => {
+                      if (!payload?.length) return null;
+                      return (
+                        <div className="flex items-center justify-center gap-4 pt-3">
+                          {payload.map((item) => {
+                            const key = item.dataKey as string;
+                            const itemConfig = chartConfig[key as keyof typeof chartConfig];
+                            const label = itemConfig?.label || item.value;
+                            
+                            // Parse label to separate sensor name from min/max
+                            const labelMatch = label?.match(/^(.+?)\s*\(Min:\s*([\d.]+)°C,\s*Max:\s*([\d.]+)°C\)$/);
+                            const sensorName = labelMatch ? labelMatch[1] : label;
+                            const minMax = labelMatch ? { min: labelMatch[2], max: labelMatch[3] } : null;
+                            
+                            return (
+                              <div
+                                key={item.value}
+                                className="flex items-center gap-1.5"
+                              >
+                                <div
+                                  className="h-2 w-2 shrink-0 rounded-[2px]"
+                                  style={{
+                                    backgroundColor: item.color,
+                                  }}
+                                />
+                                <span className="text-muted-foreground text-xs">
+                                  {sensorName}
+                                  {minMax && (
+                                    <span className="text-[10px] opacity-75">
+                                      {" "}(Min: {minMax.min}°C, Max: {minMax.max}°C)
+                                    </span>
+                                  )}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    }}
+                  />
                 </BarChart>
               </ChartContainer>
             ) : (
@@ -594,7 +819,7 @@ export function DeviceTelemetryCard({
 
             {/* All Properties List */}
             {allProperties.length > 0 && (
-              <details className="group mt-4 rounded-lg border border-border/40 bg-muted/20 p-4" open>
+              <details className="group mt-4 rounded-lg border border-border/40 bg-muted/20 p-4">
                 <summary className="cursor-pointer text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">
                   <span className="inline-flex items-center gap-2">
                     All Sensor Properties

@@ -53,6 +53,7 @@ async function getManagerStats() {
   ]);
 
   // Sort devices: displayOrder 1, 2, 3, 4... then null/0 values last
+  // Use stable sort (by deviceId) for devices with same displayOrder to maintain DOM order
   const devices = devicesRaw.sort((a, b) => {
     // Treat null or 0 as "unset" - they appear last
     const orderA = (a.displayOrder && a.displayOrder > 0) ? a.displayOrder : 9999;
@@ -60,8 +61,8 @@ async function getManagerStats() {
     if (orderA !== orderB) {
       return orderA - orderB;
     }
-    // If same order, sort by lastSyncAt desc
-    return b.lastSyncAt.getTime() - a.lastSyncAt.getTime();
+    // If same order, use deviceId for stable sorting (maintains DOM order)
+    return a.deviceId.localeCompare(b.deviceId);
   });
 
   // Calculate averages from latest telemetry
@@ -90,6 +91,30 @@ async function getManagerStats() {
     telemetryByDevice.get(t.deviceId)!.push(t);
   });
 
+  // Fetch temperature alerts for all devices
+  const temperatureAlerts = await prisma.temperatureAlert.findMany({
+    where: {
+      deviceId: { in: devices.map(d => d.deviceId) },
+    },
+  });
+
+  // Create a map of deviceId -> alerts (by channel)
+  const alertsByDevice = new Map<string, { CH1?: { min: number; max: number }; CH2?: { min: number; max: number } }>();
+  temperatureAlerts.forEach((alert) => {
+    if (!alertsByDevice.has(alert.deviceId)) {
+      alertsByDevice.set(alert.deviceId, {});
+    }
+    const deviceAlerts = alertsByDevice.get(alert.deviceId)!;
+    if (alert.sensorChannel === "CH1") {
+      deviceAlerts.CH1 = { min: alert.minTemperature, max: alert.maxTemperature };
+    } else if (alert.sensorChannel === "CH2") {
+      deviceAlerts.CH2 = { min: alert.minTemperature, max: alert.maxTemperature };
+    } else if (alert.sensorChannel === null) {
+      // Single sensor device - apply to CH1
+      deviceAlerts.CH1 = { min: alert.minTemperature, max: alert.maxTemperature };
+    }
+  });
+
   return {
     employeeCount,
     totalActivities,
@@ -101,6 +126,7 @@ async function getManagerStats() {
     onlineGateways,
     devices,
     telemetryByDevice,
+    alertsByDevice,
   };
 }
 
@@ -176,6 +202,10 @@ export default async function ManagerDashboard() {
                     sensorNameLeft={device.sensorNameLeft}
                     sensorNameRight={device.sensorNameRight}
                     sensorDisplayOrder={device.sensorDisplayOrder ? JSON.parse(device.sensorDisplayOrder) : null}
+                    minTemperatureCH1={stats.alertsByDevice.get(device.deviceId)?.CH1?.min ?? null}
+                    maxTemperatureCH1={stats.alertsByDevice.get(device.deviceId)?.CH1?.max ?? null}
+                    minTemperatureCH2={stats.alertsByDevice.get(device.deviceId)?.CH2?.min ?? null}
+                    maxTemperatureCH2={stats.alertsByDevice.get(device.deviceId)?.CH2?.max ?? null}
                   />
                 );
               })}

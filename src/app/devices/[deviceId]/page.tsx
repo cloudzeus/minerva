@@ -97,10 +97,9 @@ export default async function DeviceDetailPage({
 }) {
   const { deviceId } = await params;
   
-  const [deviceResult, deviceStats, temperatureAlerts] = await Promise.all([
+  const [deviceResult, deviceStats] = await Promise.all([
     getDeviceWithTelemetry(deviceId),
     getDeviceStats(deviceId),
-    getTemperatureAlert(deviceId).catch(() => null), // Ignore errors if user doesn't have permission
   ]);
   
   if (!deviceResult) {
@@ -110,13 +109,37 @@ export default async function DeviceDetailPage({
   // TypeScript now knows device is not null
   const device: DeviceWithTelemetry = deviceResult;
   
+  // Fetch temperature alerts directly from database (no role restriction for viewing)
+  let temperatureAlerts: any[] = [];
+  try {
+    const alerts = await prisma.temperatureAlert.findMany({
+      where: { deviceId },
+    });
+    temperatureAlerts = alerts.map(alert => ({
+      ...alert,
+      emailRecipients: JSON.parse(alert.emailRecipients),
+    }));
+  } catch (error) {
+    console.error("[Device Detail] Failed to fetch temperature alerts:", error);
+    temperatureAlerts = [];
+  }
+  
   // Parse alerts - could be array (TS302) or single object (TS301)
-  const alertsArray = Array.isArray(temperatureAlerts) ? temperatureAlerts : temperatureAlerts ? [temperatureAlerts] : [];
   const isTS302 = device.deviceType?.toUpperCase().includes("TS302") || device.deviceType?.toUpperCase().includes("TS-302");
   
-  const temperatureAlert = isTS302 ? null : alertsArray.find(a => !a.sensorChannel) || null;
-  const temperatureAlertCH1 = isTS302 ? alertsArray.find(a => a.sensorChannel === "CH1") || null : null;
-  const temperatureAlertCH2 = isTS302 ? alertsArray.find(a => a.sensorChannel === "CH2") || null : null;
+  const temperatureAlert = isTS302 ? null : temperatureAlerts.find(a => !a.sensorChannel) || null;
+  const temperatureAlertCH1 = isTS302 ? temperatureAlerts.find(a => a.sensorChannel === "CH1") || null : null;
+  const temperatureAlertCH2 = isTS302 ? temperatureAlerts.find(a => a.sensorChannel === "CH2") || null : null;
+  
+  // Debug: Log the alerts we found
+  console.log("[Device Detail] Temperature alerts:", {
+    deviceId,
+    isTS302,
+    alertsCount: temperatureAlerts.length,
+    temperatureAlert: temperatureAlert ? { min: temperatureAlert.minTemperature, max: temperatureAlert.maxTemperature } : null,
+    temperatureAlertCH1: temperatureAlertCH1 ? { min: temperatureAlertCH1.minTemperature, max: temperatureAlertCH1.maxTemperature } : null,
+    temperatureAlertCH2: temperatureAlertCH2 ? { min: temperatureAlertCH2.minTemperature, max: temperatureAlertCH2.maxTemperature } : null,
+  });
 
   const isGateway =
     device.deviceType === "GATEWAY" ||
@@ -291,6 +314,8 @@ export default async function DeviceDetailPage({
               <TemperatureLineChart
                 data={device.telemetryData}
                 title="Temperature Trends"
+                minTemperature={temperatureAlert?.minTemperature ?? temperatureAlertCH1?.minTemperature ?? null}
+                maxTemperature={temperatureAlert?.maxTemperature ?? temperatureAlertCH1?.maxTemperature ?? null}
               />
               <BatteryLineChart data={device.telemetryData} title="Battery Level" />
             </div>
@@ -299,6 +324,12 @@ export default async function DeviceDetailPage({
               <MultiMeasurementChart
                 data={device.telemetryData}
                 title="All Measurements"
+                minTemperatureCH1={temperatureAlertCH1?.minTemperature ?? null}
+                maxTemperatureCH1={temperatureAlertCH1?.maxTemperature ?? null}
+                minTemperatureCH2={temperatureAlertCH2?.minTemperature ?? null}
+                maxTemperatureCH2={temperatureAlertCH2?.maxTemperature ?? null}
+                sensorNameCH1={device.sensorNameLeft}
+                sensorNameCH2={device.sensorNameRight}
               />
             </div>
           </>

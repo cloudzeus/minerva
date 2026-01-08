@@ -89,6 +89,7 @@ export function HumidityLineChart({
             />
             <Legend wrapperStyle={{ fontSize: "0.75rem" }} />
             <Line
+              key="humidity"
               type="monotone"
               dataKey="humidity"
               stroke="#3b82f6"

@@ -3,7 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/lib/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
-import { RealtimeProvider } from "@/lib/realtime-context";
+import { Providers } from "@/components/providers";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -42,10 +42,10 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <RealtimeProvider>
+          <Providers>
             {children}
             <Toaster />
-          </RealtimeProvider>
+          </Providers>
         </ThemeProvider>
       </body>
     </html>

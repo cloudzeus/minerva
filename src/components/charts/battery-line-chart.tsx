@@ -90,6 +90,7 @@ export function BatteryLineChart({
             />
             <Legend wrapperStyle={{ fontSize: "0.75rem" }} />
             <Line
+              key="battery"
               type="monotone"
               dataKey="battery"
               stroke="#22c55e"
