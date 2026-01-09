@@ -260,7 +260,7 @@ function generateEmailBody(alert: TemperatureAlertEmail): string {
                       💡 Action Required
                     </p>
                     <p style="margin: 0; font-size: 13px; color: #78350f; line-height: 1.6;">
-                      Please investigate this device immediately and take appropriate corrective action. Check the device location, environmental conditions, and ensure proper operation.
+                      Please investigate the environment temperature immediately and take appropriate corrective action. Check the environmental conditions and ensure the temperature is within acceptable limits.
                     </p>
                   </td>
                 </tr>
