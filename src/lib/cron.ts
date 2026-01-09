@@ -107,96 +107,129 @@ async function refreshMilesightToken() {
  * Initialize and start all cron jobs
  */
 export function startCronJobs() {
-  console.log("=".repeat(80));
-  console.log("[Cron] Initializing cron jobs...");
-  console.log("=".repeat(80));
+  try {
+    console.log("=".repeat(80));
+    console.log("[Cron] Initializing cron jobs...");
+    console.log("=".repeat(80));
 
-  // Job 1: Refresh Milesight Token
-  // Runs every 30 minutes: */30 * * * *
-  const tokenRefreshJob = cron.schedule(
-    "*/30 * * * *",
-    async () => {
-      await refreshMilesightToken();
-    },
-    {
-      scheduled: true,
-      timezone: "Europe/Athens", // Adjust to your timezone
-    }
-  );
+    // Job 1: Refresh Milesight Token
+    // Runs every 30 minutes: */30 * * * *
+    const tokenRefreshJob = cron.schedule(
+      "*/30 * * * *",
+      async () => {
+        try {
+          await refreshMilesightToken();
+        } catch (error: any) {
+          console.error("[Cron] Token refresh job error:", error);
+          // Don't throw - allow other jobs to continue
+        }
+      },
+      {
+        scheduled: true,
+        timezone: "Europe/Athens", // Adjust to your timezone
+      }
+    );
 
-  console.log("[Cron] ✅ Token refresh job scheduled (every 30 minutes)");
-  console.log("[Cron] Timezone: Europe/Athens");
-  console.log("=".repeat(80));
+    console.log("[Cron] ✅ Token refresh job scheduled (every 30 minutes)");
+    console.log("[Cron] Timezone: Europe/Athens");
+    console.log("=".repeat(80));
 
-  const deviceMonitorJob = cron.schedule(
-    "*/30 * * * *",
-    async () => {
-      await monitorCriticalDevices();
-    },
-    {
-      scheduled: true,
-      timezone: "Europe/Athens",
-    }
-  );
+    const deviceMonitorJob = cron.schedule(
+      "*/30 * * * *",
+      async () => {
+        try {
+          await monitorCriticalDevices();
+        } catch (error: any) {
+          console.error("[Cron] Device monitor job error:", error);
+          // Don't throw - allow other jobs to continue
+        }
+      },
+      {
+        scheduled: true,
+        timezone: "Europe/Athens",
+      }
+    );
 
-  console.log("[Cron] ✅ Device heartbeat job scheduled (every 30 minutes)");
-  console.log("=".repeat(80));
+    console.log("[Cron] ✅ Device heartbeat job scheduled (every 30 minutes)");
+    console.log("=".repeat(80));
 
-  const deviceBackfillJob = cron.schedule(
-    "*/10 * * * *",
-    async () => {
-      await backfillCriticalDevices();
-    },
-    {
-      scheduled: true,
-      timezone: "Europe/Athens",
-    }
-  );
+    const deviceBackfillJob = cron.schedule(
+      "*/10 * * * *",
+      async () => {
+        try {
+          await backfillCriticalDevices();
+        } catch (error: any) {
+          console.error("[Cron] Device backfill job error:", error);
+          // Don't throw - allow other jobs to continue
+        }
+      },
+      {
+        scheduled: true,
+        timezone: "Europe/Athens",
+      }
+    );
 
-  console.log("[Cron] ✅ Console backfill job scheduled (every 10 minutes)");
-  console.log("=".repeat(80));
+    console.log("[Cron] ✅ Console backfill job scheduled (every 10 minutes)");
+    console.log("=".repeat(80));
 
-  const deviceConfigPollJob = cron.schedule(
-    "*/10 * * * *",
-    async () => {
-      await pollCriticalDeviceConfigs();
-    },
-    {
-      scheduled: true,
-      timezone: "Europe/Athens",
-    }
-  );
+    const deviceConfigPollJob = cron.schedule(
+      "*/10 * * * *",
+      async () => {
+        try {
+          await pollCriticalDeviceConfigs();
+        } catch (error: any) {
+          console.error("[Cron] Device config poll job error:", error);
+          // Don't throw - allow other jobs to continue
+        }
+      },
+      {
+        scheduled: true,
+        timezone: "Europe/Athens",
+      }
+    );
 
-  console.log("[Cron] ✅ Device config poll scheduled (every 10 minutes)");
-  console.log("=".repeat(80));
+    console.log("[Cron] ✅ Device config poll scheduled (every 10 minutes)");
+    console.log("=".repeat(80));
 
-  // Optionally run token refresh immediately on startup
-  // This ensures token is fresh when app starts
-  console.log("[Cron] Running initial token refresh check...");
-  refreshMilesightToken().catch((error) => {
-    console.error("[Cron] Initial token refresh failed:", error);
-  });
+    // Optionally run token refresh immediately on startup
+    // This ensures token is fresh when app starts
+    // Wrap in try-catch to prevent startup failures
+    console.log("[Cron] Running initial token refresh check...");
+    refreshMilesightToken().catch((error) => {
+      console.error("[Cron] Initial token refresh failed:", error);
+      // Don't throw - allow server to start
+    });
 
-  console.log("[Cron] Running initial device heartbeat check...");
-  monitorCriticalDevices().catch((error) => {
-    console.error("[Cron] Initial device monitor failed:", error);
-  });
-  console.log("[Cron] Running initial console backfill check...");
-  backfillCriticalDevices().catch((error) => {
-    console.error("[Cron] Initial backfill failed:", error);
-  });
-  console.log("[Cron] Running initial device config poll...");
-  pollCriticalDeviceConfigs().catch((error) => {
-    console.error("[Cron] Initial config poll failed:", error);
-  });
+    console.log("[Cron] Running initial device heartbeat check...");
+    monitorCriticalDevices().catch((error) => {
+      console.error("[Cron] Initial device monitor failed:", error);
+      // Don't throw - allow server to start
+    });
+    console.log("[Cron] Running initial console backfill check...");
+    backfillCriticalDevices().catch((error) => {
+      console.error("[Cron] Initial backfill failed:", error);
+      // Don't throw - allow server to start
+    });
+    console.log("[Cron] Running initial device config poll...");
+    pollCriticalDeviceConfigs().catch((error) => {
+      console.error("[Cron] Initial config poll failed:", error);
+      // Don't throw - allow server to start
+    });
 
-  // Return job references for potential management
-  return {
-    tokenRefreshJob,
-    deviceMonitorJob,
-    deviceBackfillJob,
-    deviceConfigPollJob,
-  };
+    // Return job references for potential management
+    return {
+      tokenRefreshJob,
+      deviceMonitorJob,
+      deviceBackfillJob,
+      deviceConfigPollJob,
+    };
+  } catch (error: any) {
+    console.error("[Cron] ❌ Failed to initialize cron jobs:", error);
+    console.error("[Cron] Error details:", error.message);
+    console.error("[Cron] Stack:", error.stack);
+    // Don't throw - allow server to start even if cron initialization fails
+    return null;
+  }
 }
 
 /**
