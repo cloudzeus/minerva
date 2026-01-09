@@ -8,7 +8,7 @@ interface TimeRangeContextType {
 }
 
 const defaultContextValue: TimeRangeContextType = {
-  timeRange: "24h",
+  timeRange: "24h", // Default to 24 hours
   setTimeRange: () => {
     console.warn("setTimeRange called outside TimeRangeProvider");
   },

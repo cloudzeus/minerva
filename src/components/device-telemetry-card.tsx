@@ -252,6 +252,7 @@ export function DeviceTelemetryCard({
   }, [latestReading]);
 
   // Prepare chart data with ALL numeric properties
+  // Sort by timestamp to ensure chronological order
   const allData = React.useMemo(() => {
     return telemetryData
       .map((d) => {
@@ -264,13 +265,16 @@ export function DeviceTelemetryCard({
         // Add all numeric properties to data point
         allProperties.forEach((prop) => {
           const value = sensorData[prop];
-          if (typeof value === "number") {
+          if (typeof value === "number" && !isNaN(value)) {
             dataPoint[prop] = value;
+          } else {
+            dataPoint[prop] = null;
           }
         });
         
         return dataPoint;
       })
+      .filter((d) => d.timestamp && !isNaN(d.timestamp)) // Filter out invalid timestamps
       .sort((a, b) => a.timestamp - b.timestamp);
   }, [telemetryData, allProperties]);
 
@@ -281,65 +285,116 @@ export function DeviceTelemetryCard({
     "6h": 6 * 60 * 60 * 1000,
     "24h": 24 * 60 * 60 * 1000,
     "7d": 7 * 24 * 60 * 60 * 1000,
-    "all": Number.MAX_SAFE_INTEGER, // Show all data
+    "30d": 30 * 24 * 60 * 60 * 1000, // Last 30 days
   };
   
-  const filteredData = timeRange === "all" 
-    ? allData 
-    : allData.filter((item) => {
-        return now - item.timestamp <= timeRanges[timeRange];
-      });
+  // Filter by time range - ensure we get all data within the range
+  const filteredData = React.useMemo(() => {
+    const rangeStart = now - timeRanges[timeRange];
+    return allData.filter((item) => {
+      return item.timestamp >= rangeStart && item.timestamp <= now;
+    });
+  }, [allData, timeRange, timeRanges, now]);
 
-  // Always show 10 buckets (each bucket renders up to 2 bars: temp left/right)
+  // Always show 10 evenly spaced data points (each point renders up to 2 bars: temp left/right)
+  // Divide the time range into 10 equal intervals and find the closest data point for each
   const chartData = React.useMemo(() => {
-    const TARGET_BUCKETS = 10;
+    const TARGET_POINTS = 10;
 
     if (filteredData.length === 0) {
       return [];
     }
 
+    // Sort filtered data by timestamp to ensure proper closest point finding
+    const sortedData = [...filteredData].sort((a, b) => a.timestamp - b.timestamp);
+
+    if (sortedData.length === 0) {
+      return [];
+    }
+
     const rangeNow = Date.now();
-    const rangeEnd =
-      timeRange === "all"
-        ? filteredData[filteredData.length - 1]?.timestamp ?? rangeNow
-        : rangeNow;
+    
+    // For all ranges, use current time as end and calculate start from range
+    const rangeEnd = rangeNow;
+    const rangeStart = rangeNow - timeRanges[timeRange];
 
-    const defaultRangeStart = rangeEnd - TARGET_BUCKETS * 60 * 1000;
-    const rangeStart =
-      timeRange === "all"
-        ? filteredData[0]?.timestamp ?? defaultRangeStart
-        : rangeEnd - timeRanges[timeRange];
+    const totalDuration = rangeEnd - rangeStart;
+    const intervalDuration = totalDuration / TARGET_POINTS;
 
-    const totalDuration = Math.max(rangeEnd - rangeStart, TARGET_BUCKETS);
-    const bucketDuration = totalDuration / TARGET_BUCKETS;
-
-    const buckets = Array.from({ length: TARGET_BUCKETS }).map((_, index) => {
-      const bucketStart = rangeStart + index * bucketDuration;
-      const bucketEnd = bucketStart + bucketDuration;
-      const bucketMid = bucketStart + bucketDuration / 2;
-
-      const bucketPoints = filteredData.filter(
-        (item) => item.timestamp >= bucketStart && item.timestamp < bucketEnd
-      );
-
-      const bucketEntry: Record<string, any> = {
-        timestamp: bucketMid,
-      };
-
-      allProperties.forEach((prop) => {
-        const values = bucketPoints
-          .map((point) => point[prop])
-          .filter((value) => typeof value === "number");
-        bucketEntry[prop] =
-          values.length > 0
-            ? values.reduce((sum, value) => sum + value, 0) / values.length
-            : null;
-      });
-
-      return bucketEntry;
+    // Create 10 evenly spaced target timestamps (one for each bar)
+    // These will be used for X-axis positioning to ensure even spacing
+    const targetTimestamps = Array.from({ length: TARGET_POINTS }).map((_, index) => {
+      return rangeStart + (index + 0.5) * intervalDuration; // Use midpoint of interval
     });
 
-    return buckets;
+    // For each target timestamp, find the closest data point or use average from nearby points
+    // Since devices send data every 20 minutes, we should always find a value
+    const chartPoints = targetTimestamps.map((targetTime, index) => {
+      // Find nearby points within a reasonable window (e.g., 1 hour)
+      const searchWindow = 60 * 60 * 1000; // 1 hour window
+      const nearbyPoints = sortedData.filter((point) => {
+        return Math.abs(point.timestamp - targetTime) <= searchWindow;
+      });
+
+      // Create entry with evenly spaced timestamp for X-axis
+      const entry: Record<string, any> = {
+        timestamp: targetTime, // Use target timestamp for even spacing on X-axis
+      };
+
+      // For each property, calculate value from nearby points
+      allProperties.forEach((prop) => {
+        if (nearbyPoints.length > 0) {
+          // Collect all valid values for this property from nearby points
+          const validValues = nearbyPoints
+            .map((point) => point[prop])
+            .filter((value) => value !== null && value !== undefined && !isNaN(value) && typeof value === "number");
+
+          if (validValues.length > 0) {
+            // Use average of nearby points for more stable values
+            const average = validValues.reduce((sum, val) => sum + val, 0) / validValues.length;
+            entry[prop] = average;
+          } else {
+            // No valid values in nearby points, try to find closest point with this property
+            let closestValue: number | null = null;
+            let closestDistance = Infinity;
+
+            for (const point of sortedData) {
+              const value = point[prop];
+              if (value !== null && value !== undefined && !isNaN(value) && typeof value === "number") {
+                const distance = Math.abs(point.timestamp - targetTime);
+                if (distance < closestDistance) {
+                  closestDistance = distance;
+                  closestValue = value;
+                }
+              }
+            }
+
+            entry[prop] = closestValue;
+          }
+        } else {
+          // No nearby points, find closest point with this property from all data
+          let closestValue: number | null = null;
+          let closestDistance = Infinity;
+
+          for (const point of sortedData) {
+            const value = point[prop];
+            if (value !== null && value !== undefined && !isNaN(value) && typeof value === "number") {
+              const distance = Math.abs(point.timestamp - targetTime);
+              if (distance < closestDistance) {
+                closestDistance = distance;
+                closestValue = value;
+              }
+            }
+          }
+
+          entry[prop] = closestValue;
+        }
+      });
+
+      return entry;
+    });
+
+    return chartPoints;
   }, [filteredData, timeRange, timeRanges, allProperties]);
 
   // Only show temperature_left and temperature_right in chart
@@ -458,8 +513,8 @@ export function DeviceTelemetryCard({
               <SelectItem value="7d" className="rounded-lg text-xs">
                 Last 7 Days
               </SelectItem>
-              <SelectItem value="all" className="rounded-lg text-xs">
-                All Time
+              <SelectItem value="30d" className="rounded-lg text-xs">
+                Last 30 Days
               </SelectItem>
             </SelectContent>
           </Select>
@@ -579,6 +634,7 @@ export function DeviceTelemetryCard({
                     tickMargin={10}
                     axisLine={false}
                     minTickGap={20}
+                    interval={0}
                     tick={{ fill: "#000000", fontWeight: "bold", fontSize: "14px" }}
                     tickFormatter={(value) => {
                       try {
@@ -587,20 +643,21 @@ export function DeviceTelemetryCard({
                         const date = new Date(timestamp);
                         if (isNaN(date.getTime())) return "";
 
-                        const bucketLabelDuration =
-                          Math.max(
-                            timeRange === "all"
-                              ? (filteredData[filteredData.length - 1]
-                                  ?.timestamp || timestamp) -
-                                  (filteredData[0]?.timestamp || timestamp)
-                              : timeRanges[timeRange],
-                            1
-                          ) / 10;
+                        // Calculate interval duration based on time range
+                        const rangeNow = Date.now();
+                        const rangeEnd = rangeNow;
+                        const rangeStart = rangeNow - timeRanges[timeRange];
+                        const intervalDuration = rangeEnd - rangeStart;
+                        const intervalDurationPerBar = intervalDuration / 10;
 
-                        if (bucketLabelDuration <= 60 * 60 * 1000) {
+                        // Format based on interval duration per bar
+                        // For intervals < 1 hour (6 minutes per bar): show HH:mm
+                        // For intervals < 24 hours (144 minutes per bar): show MMM d HH:mm
+                        // For intervals >= 24 hours (16.8 hours per bar): show MMM d
+                        if (intervalDurationPerBar < 60 * 60 * 1000) {
                           return format(date, "HH:mm");
                         }
-                        if (bucketLabelDuration <= 24 * 60 * 60 * 1000) {
+                        if (intervalDurationPerBar < 24 * 60 * 60 * 1000) {
                           return format(date, "MMM d HH:mm");
                         }
                         return format(date, "MMM d");
