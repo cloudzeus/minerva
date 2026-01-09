@@ -1,8 +1,6 @@
 /**
- * Email notification service for temperature alerts using Brevo API
+ * Email notification service for temperature alerts using SMTP2GO API
  */
-
-import * as brevo from "@getbrevo/brevo";
 
 export interface TemperatureAlertEmail {
   deviceId: string;
@@ -16,68 +14,85 @@ export interface TemperatureAlertEmail {
 }
 
 /**
- * Send temperature alert email via Brevo
+ * Send temperature alert email via SMTP2GO
  */
 export async function sendTemperatureAlertEmail(alert: TemperatureAlertEmail) {
   try {
-    const brevoApiKey = process.env.BREVO_KEY;
-    const fromEmail = process.env.BREVO_FROM_EMAIL || "alerts@minerva.wwa.gr";
-    const fromName = process.env.BREVO_FROM_NAME || "MINERVA Alerts";
+    const smtp2goApiKey = process.env.SMTP_2_GO_KEY;
+    const fromEmail = process.env.SMTP_2_GO_FROM_EMAIL || "iot@aic.gr";
+    const fromName = process.env.SMTP_2_GO_FROM_NAME || "AIC IOT ALERTS";
 
-    if (!brevoApiKey) {
-      console.error("[Email Service] BREVO_KEY not configured");
+    if (!smtp2goApiKey) {
+      console.error("[Email Service] ❌ SMTP_2_GO_KEY not configured in environment variables");
+      console.error("[Email Service] Please set SMTP_2_GO_KEY in your .env file");
       return {
         success: false,
-        error: "Email service not configured (missing BREVO_KEY)",
+        error: "Email service not configured (missing SMTP_2_GO_KEY)",
       };
     }
 
-    console.log("[Email Service] Sending temperature alert via Brevo:", {
+    if (!alert.recipients || alert.recipients.length === 0) {
+      console.error("[Email Service] ❌ No email recipients provided");
+      return {
+        success: false,
+        error: "No email recipients provided",
+      };
+    }
+
+    console.log("[Email Service] Sending temperature alert via SMTP2GO:", {
       deviceName: alert.deviceName,
       currentTemp: alert.currentTemperature,
       alertType: alert.alertType,
       recipients: alert.recipients,
     });
 
-    // Initialize Brevo API
-    const apiInstance = new brevo.TransactionalEmailsApi();
-    apiInstance.setApiKey(
-      brevo.TransactionalEmailsApiApiKeys.apiKey,
-      brevoApiKey
-    );
-
     const subject = `🚨 Temperature Alert: ${alert.deviceName}`;
     const htmlContent = generateEmailBody(alert);
 
-    // Prepare email
-    const sendSmtpEmail = new brevo.SendSmtpEmail();
-    sendSmtpEmail.subject = subject;
-    sendSmtpEmail.htmlContent = htmlContent;
-    sendSmtpEmail.sender = {
-      name: fromName,
-      email: fromEmail,
-    };
-    sendSmtpEmail.to = alert.recipients.map((email) => ({
-      email,
-      name: email.split("@")[0],
-    }));
+    // SMTP2GO API endpoint
+    const response = await fetch("https://api.smtp2go.com/v3/email/send", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Smtp2go-Api-Key": smtp2goApiKey,
+      },
+      body: JSON.stringify({
+        api_key: smtp2goApiKey,
+        to: alert.recipients,
+        sender: fromEmail,
+        subject: subject,
+        html_body: htmlContent,
+        text_body: `Temperature Alert: ${alert.deviceName}\n\nCurrent Temperature: ${alert.currentTemperature.toFixed(1)}°C\nThreshold Range: ${alert.minThreshold.toFixed(1)}°C - ${alert.maxThreshold.toFixed(1)}°C\nAlert Type: ${alert.alertType === "MIN" ? "Temperature Too Low" : "Temperature Too High"}`,
+      }),
+    });
 
-    // Send email via Brevo
-    const response = await apiInstance.sendTransacEmail(sendSmtpEmail);
+    const result = await response.json();
 
-    console.log("[Email Service] ✅ Email sent successfully via Brevo:", {
+    if (!response.ok || result.data?.error) {
+      throw new Error(result.data?.error || `SMTP2GO API error: ${response.statusText}`);
+    }
+
+    console.log("[Email Service] ✅ Email sent successfully via SMTP2GO:", {
+      emailId: result.data?.email_id,
       recipients: alert.recipients.length,
+      recipientEmails: alert.recipients,
     });
 
     return {
       success: true,
       emailsSent: alert.recipients.length,
+      emailId: result.data?.email_id,
     };
   } catch (error: any) {
-    console.error("[Email Service] Failed to send alert via Brevo:", error);
+    console.error("[Email Service] ❌ Failed to send alert via SMTP2GO:", error);
+    console.error("[Email Service] Error details:", {
+      message: error.message,
+      stack: error.stack,
+    });
     return {
       success: false,
       error: error.message || "Failed to send email",
+      details: error.stack,
     };
   }
 }
@@ -289,23 +304,17 @@ export async function sendDeviceOfflineAlertEmail(
   alert: DeviceOfflineAlertEmail
 ) {
   try {
-    const brevoApiKey = process.env.BREVO_KEY;
-    const fromEmail = process.env.BREVO_FROM_EMAIL || "alerts@minerva.wwa.gr";
-    const fromName = process.env.BREVO_FROM_NAME || "MINERVA Alerts";
+    const smtp2goApiKey = process.env.SMTP_2_GO_KEY;
+    const fromEmail = process.env.SMTP_2_GO_FROM_EMAIL || "iot@aic.gr";
+    const fromName = process.env.SMTP_2_GO_FROM_NAME || "AIC IOT ALERTS";
 
-    if (!brevoApiKey) {
-      console.error("[Email Service] BREVO_KEY not configured");
+    if (!smtp2goApiKey) {
+      console.error("[Email Service] ❌ SMTP_2_GO_KEY not configured");
       return {
         success: false,
-        error: "Email service not configured (missing BREVO_KEY)",
+        error: "Email service not configured (missing SMTP_2_GO_KEY)",
       };
     }
-
-    const apiInstance = new brevo.TransactionalEmailsApi();
-    apiInstance.setApiKey(
-      brevo.TransactionalEmailsApiApiKeys.apiKey,
-      brevoApiKey
-    );
 
     const subject = `⚠️ No Telemetry from ${alert.deviceName}`;
     const htmlContent = `
@@ -337,23 +346,31 @@ export async function sendDeviceOfflineAlertEmail(
       </div>
     `;
 
-    const sendSmtpEmail = new brevo.SendSmtpEmail();
-    sendSmtpEmail.subject = subject;
-    sendSmtpEmail.htmlContent = htmlContent;
-    sendSmtpEmail.sender = {
-      name: fromName,
-      email: fromEmail,
-    };
-    sendSmtpEmail.to = alert.recipients.map((email) => ({
-      email,
-      name: email.split("@")[0],
-    }));
+    const response = await fetch("https://api.smtp2go.com/v3/email/send", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Smtp2go-Api-Key": smtp2goApiKey,
+      },
+      body: JSON.stringify({
+        api_key: smtp2goApiKey,
+        to: alert.recipients,
+        sender: fromEmail,
+        subject: subject,
+        html_body: htmlContent,
+      }),
+    });
 
-    await apiInstance.sendTransacEmail(sendSmtpEmail);
-    console.log("[Email Service] ✅ Offline alert sent via Brevo");
+    const result = await response.json();
+
+    if (!response.ok || result.data?.error) {
+      throw new Error(result.data?.error || `SMTP2GO API error: ${response.statusText}`);
+    }
+
+    console.log("[Email Service] ✅ Offline alert sent via SMTP2GO");
     return { success: true };
   } catch (error: any) {
-    console.error("[Email Service] Failed to send offline alert:", error);
+    console.error("[Email Service] ❌ Failed to send offline alert:", error);
     return {
       success: false,
       error: error.message || "Failed to send email",
@@ -370,23 +387,17 @@ interface DeviceRecoveryAlertEmail {
 
 export async function sendDeviceRecoveryEmail(alert: DeviceRecoveryAlertEmail) {
   try {
-    const brevoApiKey = process.env.BREVO_KEY;
-    const fromEmail = process.env.BREVO_FROM_EMAIL || "alerts@minerva.wwa.gr";
-    const fromName = process.env.BREVO_FROM_NAME || "MINERVA Alerts";
+    const smtp2goApiKey = process.env.SMTP_2_GO_KEY;
+    const fromEmail = process.env.SMTP_2_GO_FROM_EMAIL || "iot@aic.gr";
+    const fromName = process.env.SMTP_2_GO_FROM_NAME || "AIC IOT ALERTS";
 
-    if (!brevoApiKey) {
-      console.error("[Email Service] BREVO_KEY not configured");
+    if (!smtp2goApiKey) {
+      console.error("[Email Service] ❌ SMTP_2_GO_KEY not configured");
       return {
         success: false,
-        error: "Email service not configured (missing BREVO_KEY)",
+        error: "Email service not configured (missing SMTP_2_GO_KEY)",
       };
     }
-
-    const apiInstance = new brevo.TransactionalEmailsApi();
-    apiInstance.setApiKey(
-      brevo.TransactionalEmailsApiApiKeys.apiKey,
-      brevoApiKey
-    );
 
     const subject = `✅ Telemetry Resumed: ${alert.deviceName}`;
     const htmlContent = `
@@ -417,23 +428,31 @@ export async function sendDeviceRecoveryEmail(alert: DeviceRecoveryAlertEmail) {
       </div>
     `;
 
-    const sendSmtpEmail = new brevo.SendSmtpEmail();
-    sendSmtpEmail.subject = subject;
-    sendSmtpEmail.htmlContent = htmlContent;
-    sendSmtpEmail.sender = {
-      name: fromName,
-      email: fromEmail,
-    };
-    sendSmtpEmail.to = alert.recipients.map((email) => ({
-      email,
-      name: email.split("@")[0],
-    }));
+    const response = await fetch("https://api.smtp2go.com/v3/email/send", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Smtp2go-Api-Key": smtp2goApiKey,
+      },
+      body: JSON.stringify({
+        api_key: smtp2goApiKey,
+        to: alert.recipients,
+        sender: fromEmail,
+        subject: subject,
+        html_body: htmlContent,
+      }),
+    });
 
-    await apiInstance.sendTransacEmail(sendSmtpEmail);
-    console.log("[Email Service] ✅ Recovery alert sent via Brevo");
+    const result = await response.json();
+
+    if (!response.ok || result.data?.error) {
+      throw new Error(result.data?.error || `SMTP2GO API error: ${response.statusText}`);
+    }
+
+    console.log("[Email Service] ✅ Recovery alert sent via SMTP2GO");
     return { success: true };
   } catch (error: any) {
-    console.error("[Email Service] Failed to send recovery alert:", error);
+    console.error("[Email Service] ❌ Failed to send recovery alert:", error);
     return {
       success: false,
       error: error.message || "Failed to send email",
@@ -455,65 +474,61 @@ export interface OfflineDeviceNotificationEmail {
 }
 
 /**
- * Send offline device notification email via Brevo
+ * Send offline device notification email via SMTP2GO
  */
 export async function sendOfflineDeviceNotificationEmail(
   notification: OfflineDeviceNotificationEmail
 ) {
   try {
-    const brevoApiKey = process.env.BREVO_KEY;
-    const fromEmail = process.env.BREVO_FROM_EMAIL || "alerts@minerva.wwa.gr";
-    const fromName = process.env.BREVO_FROM_NAME || "MINERVA Alerts";
+    const smtp2goApiKey = process.env.SMTP_2_GO_KEY;
+    const fromEmail = process.env.SMTP_2_GO_FROM_EMAIL || "iot@aic.gr";
+    const fromName = process.env.SMTP_2_GO_FROM_NAME || "AIC IOT ALERTS";
 
-    if (!brevoApiKey) {
-      console.error("[Email Service] BREVO_KEY not configured");
+    if (!smtp2goApiKey) {
+      console.error("[Email Service] ❌ SMTP_2_GO_KEY not configured");
       return {
         success: false,
-        error: "Email service not configured (missing BREVO_KEY)",
+        error: "Email service not configured (missing SMTP_2_GO_KEY)",
       };
     }
 
-    console.log("[Email Service] Sending offline device notification via Brevo:", {
+    console.log("[Email Service] Sending offline device notification via SMTP2GO:", {
       deviceCount: notification.devices.length,
       recipient: notification.recipientEmail,
     });
 
-    // Initialize Brevo API
-    const apiInstance = new brevo.TransactionalEmailsApi();
-    apiInstance.setApiKey(
-      brevo.TransactionalEmailsApiApiKeys.apiKey,
-      brevoApiKey
-    );
-
     const subject = `⚠️ ${notification.devices.length} Device(s) Offline - MINERVA`;
     const htmlContent = generateOfflineDeviceEmailBody(notification);
 
-    // Prepare email
-    const sendSmtpEmail = new brevo.SendSmtpEmail();
-    sendSmtpEmail.subject = subject;
-    sendSmtpEmail.htmlContent = htmlContent;
-    sendSmtpEmail.sender = {
-      name: fromName,
-      email: fromEmail,
-    };
-    sendSmtpEmail.to = [
-      {
-        email: notification.recipientEmail,
-        name: notification.recipientEmail.split("@")[0],
+    const response = await fetch("https://api.smtp2go.com/v3/email/send", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Smtp2go-Api-Key": smtp2goApiKey,
       },
-    ];
+      body: JSON.stringify({
+        api_key: smtp2goApiKey,
+        to: [notification.recipientEmail],
+        sender: fromEmail,
+        subject: subject,
+        html_body: htmlContent,
+      }),
+    });
 
-    // Send email via Brevo
-    const response = await apiInstance.sendTransacEmail(sendSmtpEmail);
+    const result = await response.json();
 
-    console.log("[Email Service] ✅ Offline device notification sent successfully via Brevo");
+    if (!response.ok || result.data?.error) {
+      throw new Error(result.data?.error || `SMTP2GO API error: ${response.statusText}`);
+    }
+
+    console.log("[Email Service] ✅ Offline device notification sent successfully via SMTP2GO");
 
     return {
       success: true,
       emailsSent: 1,
     };
   } catch (error: any) {
-    console.error("[Email Service] Failed to send offline device notification via Brevo:", error);
+    console.error("[Email Service] ❌ Failed to send offline device notification via SMTP2GO:", error);
     return {
       success: false,
       error: error.message || "Failed to send email",
@@ -655,4 +670,3 @@ function generateOfflineDeviceEmailBody(notification: OfflineDeviceNotificationE
 </html>
   `;
 }
-

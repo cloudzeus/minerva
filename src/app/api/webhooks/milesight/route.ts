@@ -433,12 +433,31 @@ async function checkAndSendAlert(
   // Send alert email
   const channelLabel = channel ? ` ${channel}` : "";
   console.log(
-    `[Temperature Alert] 🚨 Temperature ${isBelowMin ? "too low" : "too high"} for ${deviceName}${channelLabel}: ${temperature}°C`
+    `[Temperature Alert] 🚨 Temperature ${isBelowMin ? "too low" : "too high"} for ${deviceName}${channelLabel}: ${temperature}°C (Range: ${alertSettings.minTemperature}°C - ${alertSettings.maxTemperature}°C)`
   );
 
-  const recipients = JSON.parse(alertSettings.emailRecipients);
+  // Parse email recipients
+  let recipients: string[] = [];
+  try {
+    recipients = JSON.parse(alertSettings.emailRecipients);
+    // Filter out empty strings and validate email format
+    recipients = recipients
+      .filter((email: string) => email && email.trim() !== "")
+      .map((email: string) => email.trim().toLowerCase());
+  } catch (error) {
+    console.error(`[Temperature Alert] ❌ Failed to parse email recipients for ${deviceName}${channelLabel}:`, error);
+    console.error(`[Temperature Alert] Raw emailRecipients:`, alertSettings.emailRecipients);
+    return; // Don't send email if recipients can't be parsed
+  }
+
+  if (recipients.length === 0) {
+    console.warn(`[Temperature Alert] ⚠️ No valid email recipients configured for ${deviceName}${channelLabel}`);
+    return; // Don't send email if no recipients
+  }
+
+  console.log(`[Temperature Alert] 📧 Sending alert to ${recipients.length} recipient(s):`, recipients);
   
-  await sendTemperatureAlertEmail({
+  const emailResult = await sendTemperatureAlertEmail({
     deviceId,
     deviceName: `${deviceName}${channelLabel}`,
     currentTemperature: temperature,
@@ -448,6 +467,11 @@ async function checkAndSendAlert(
     timestamp: now,
     recipients,
   });
+
+  if (!emailResult.success) {
+    console.error(`[Temperature Alert] ❌ Failed to send email:`, emailResult.error);
+    return; // Don't update alert stats if email failed
+  }
 
   // Update last alert time and increment counter
   // Handle null channel separately as @@unique constraint doesn't treat null as unique
@@ -480,7 +504,7 @@ async function checkAndSendAlert(
   }
 
   console.log(
-    `[Temperature Alert] ✅ Alert sent to ${recipients.length} recipient(s) for ${deviceName}${channelLabel}`
+    `[Temperature Alert] ✅ Alert sent successfully to ${recipients.length} recipient(s) for ${deviceName}${channelLabel}`
   );
 }
 

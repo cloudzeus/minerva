@@ -662,7 +662,8 @@ export function DeviceTelemetryCard({
                     }
                   />
                   {/* Temperature Alert Reference Lines for CH1 (temperature_left) - Orange color */}
-                  {hasTemperatureLeft && temperatureStats.left.min !== null && (
+                  {/* Show CH1 reference lines if we have alert settings, even if no data yet */}
+                  {temperatureStats.left.min !== null && (
                     <ReferenceLine
                       y={temperatureStats.left.min}
                       stroke="#fb923c"
@@ -678,7 +679,7 @@ export function DeviceTelemetryCard({
                       ifOverflow="extendDomain"
                     />
                   )}
-                  {hasTemperatureLeft && temperatureStats.left.max !== null && (
+                  {temperatureStats.left.max !== null && (
                     <ReferenceLine
                       y={temperatureStats.left.max}
                       stroke="#fb923c"
@@ -695,7 +696,8 @@ export function DeviceTelemetryCard({
                     />
                   )}
                   {/* Temperature Alert Reference Lines for CH2 (temperature_right) - Green color */}
-                  {hasTemperatureRight && temperatureStats.right.min !== null && (
+                  {/* Show CH2 reference lines if we have alert settings, even if no data yet */}
+                  {temperatureStats.right.min !== null && (
                     <ReferenceLine
                       y={temperatureStats.right.min}
                       stroke="#16a34a"
@@ -711,7 +713,7 @@ export function DeviceTelemetryCard({
                       ifOverflow="extendDomain"
                     />
                   )}
-                  {hasTemperatureRight && temperatureStats.right.max !== null && (
+                  {temperatureStats.right.max !== null && (
                     <ReferenceLine
                       y={temperatureStats.right.max}
                       stroke="#16a34a"
