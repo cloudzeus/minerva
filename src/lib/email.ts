@@ -292,6 +292,123 @@ function generateEmailBody(alert: TemperatureAlertEmail): string {
   `.trim();
 }
 
+export interface TemperatureAlertRecipientDisabledEmail {
+  deviceName: string;
+  recipientEmail: string;
+  channelLabel?: string | null; // e.g. "CH1", "CH2", or null for single sensor
+}
+
+/**
+ * Send email to a recipient notifying them they have been disabled from temperature alerts.
+ */
+export async function sendTemperatureAlertRecipientDisabledEmail(
+  notification: TemperatureAlertRecipientDisabledEmail
+) {
+  try {
+    const smtp2goApiKey = process.env.SMTP_2_GO_KEY;
+    const fromEmail = process.env.SMTP_2_GO_FROM_EMAIL || "iot@aic.gr";
+
+    if (!smtp2goApiKey) {
+      console.error("[Email Service] ❌ SMTP_2_GO_KEY not configured");
+      return {
+        success: false,
+        error: "Email service not configured (missing SMTP_2_GO_KEY)",
+      };
+    }
+
+    const channelLabel = notification.channelLabel ? ` ${notification.channelLabel}` : "";
+    const subject = `Temperature alerts disabled – ${notification.deviceName}${channelLabel}`;
+    const htmlContent = generateRecipientDisabledEmailBody(notification);
+
+    const response = await fetch("https://api.smtp2go.com/v3/email/send", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Smtp2go-Api-Key": smtp2goApiKey,
+      },
+      body: JSON.stringify({
+        api_key: smtp2goApiKey,
+        to: [notification.recipientEmail],
+        sender: fromEmail,
+        subject,
+        html_body: htmlContent,
+        text_body: `You have been disabled from receiving temperature alert notifications for device "${notification.deviceName}"${channelLabel}. You will no longer receive emails when temperature goes out of range.`,
+      }),
+    });
+
+    const result = await response.json();
+
+    if (!response.ok || result.data?.error) {
+      throw new Error(result.data?.error || `SMTP2GO API error: ${response.statusText}`);
+    }
+
+    console.log("[Email Service] ✅ Recipient disabled notification sent to", notification.recipientEmail);
+    return { success: true, emailsSent: 1 };
+  } catch (error: any) {
+    console.error("[Email Service] ❌ Failed to send recipient disabled notification:", error);
+    return {
+      success: false,
+      error: error.message || "Failed to send email",
+    };
+  }
+}
+
+function generateRecipientDisabledEmailBody(
+  notification: TemperatureAlertRecipientDisabledEmail
+): string {
+  const channelLabel = notification.channelLabel ? ` (${notification.channelLabel})` : "";
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Temperature alerts disabled</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f3f4f6; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;">
+  <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%" style="background-color: #f3f4f6; padding: 20px 0;">
+    <tr>
+      <td align="center">
+        <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="600" style="max-width: 600px; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+          <tr>
+            <td style="background: linear-gradient(135deg, #64748b 0%, #475569 100%); padding: 30px; text-align: center;">
+              <h1 style="color: #ffffff; margin: 0; font-size: 22px; font-weight: 700;">
+                🔕 Temperature alerts disabled
+              </h1>
+              <p style="color: rgba(255, 255, 255, 0.9); margin: 8px 0 0 0; font-size: 14px;">
+                MINERVA Device Monitoring
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 30px;">
+              <p style="margin: 0 0 16px 0; font-size: 15px; color: #374151; line-height: 1.6;">
+                You have been <strong>disabled from receiving temperature alert notifications</strong> for the following device:
+              </p>
+              <p style="margin: 0 0 20px 0; font-size: 16px; font-weight: 600; color: #1f2937;">
+                ${notification.deviceName}${channelLabel}
+              </p>
+              <p style="margin: 0 0 0 0; font-size: 14px; color: #6b7280; line-height: 1.6;">
+                You will no longer receive emails when the temperature goes out of range for this device. To receive alerts again, an administrator must re-enable notifications for your email address in the device alert settings.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 20px 30px; background-color: #f9fafb; border-top: 1px solid #e5e7eb;">
+              <p style="margin: 0; font-size: 12px; color: #9ca3af; text-align: center;">
+                This is an automated message from MINERVA Device Monitoring System.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+  `.trim();
+}
+
 interface DeviceOfflineAlertEmail {
   deviceName: string;
   serialNumber?: string | null;

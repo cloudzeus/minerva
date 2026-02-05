@@ -337,16 +337,17 @@ async function checkTemperatureAlerts(
       return; // No alerts configured
     }
 
-    // Map alerts by sensor channel
+    // Map alerts by sensor channel – only include when top-level "Notifications" switch is ON.
+    // When user disables notifications at the top, enabled is false and no emails are sent to any recipient.
     const alertsByChannel = new Map<string | null, typeof allAlertSettings[0]>();
     allAlertSettings.forEach(alert => {
-      if (alert.enabled) {
+      if (alert.enabled === true) {
         alertsByChannel.set(alert.sensorChannel, alert);
       }
     });
 
     if (alertsByChannel.size === 0) {
-      return; // All alerts disabled
+      return; // All alerts disabled at device/channel level
     }
 
     const now = new Date();
@@ -409,6 +410,11 @@ async function checkAndSendAlert(
   channel: string | null,
   now: Date
 ) {
+  // Defensive: never send when top-level notifications are disabled for this device/channel
+  if (alertSettings.enabled === false) {
+    return;
+  }
+
   const isBelowMin = temperature < alertSettings.minTemperature;
   const isAboveMax = temperature > alertSettings.maxTemperature;
 
@@ -436,14 +442,21 @@ async function checkAndSendAlert(
     `[Temperature Alert] 🚨 Temperature ${isBelowMin ? "too low" : "too high"} for ${deviceName}${channelLabel}: ${temperature}°C (Range: ${alertSettings.minTemperature}°C - ${alertSettings.maxTemperature}°C)`
   );
 
-  // Parse email recipients
+  // Parse email recipients (supports string[] or { email, enabled }[])
   let recipients: string[] = [];
   try {
-    recipients = JSON.parse(alertSettings.emailRecipients);
-    // Filter out empty strings and validate email format
-    recipients = recipients
-      .filter((email: string) => email && email.trim() !== "")
-      .map((email: string) => email.trim().toLowerCase());
+    const raw = JSON.parse(alertSettings.emailRecipients);
+    const list = Array.isArray(raw) ? raw : [];
+    recipients = list
+      .map((item: string | { email?: string; enabled?: boolean }) => {
+        if (typeof item === "string") return { email: item.trim(), enabled: true };
+        return {
+          email: (item.email || "").trim(),
+          enabled: item.enabled !== false,
+        };
+      })
+      .filter((r: { email: string; enabled: boolean }) => r.email !== "" && r.enabled)
+      .map((r: { email: string }) => r.email.toLowerCase());
   } catch (error) {
     console.error(`[Temperature Alert] ❌ Failed to parse email recipients for ${deviceName}${channelLabel}:`, error);
     console.error(`[Temperature Alert] Raw emailRecipients:`, alertSettings.emailRecipients);

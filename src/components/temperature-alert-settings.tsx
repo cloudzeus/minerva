@@ -8,8 +8,20 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { FaThermometerHalf, FaEnvelope, FaPlus, FaTimes, FaBell, FaSave } from "react-icons/fa";
 import { toast } from "sonner";
-import { saveTemperatureAlert, deleteTemperatureAlert } from "@/app/actions/temperature-alerts";
+import { saveTemperatureAlert, deleteTemperatureAlert, setTemperatureAlertEnabled } from "@/app/actions/temperature-alerts";
 import { Switch } from "@/components/ui/switch";
+
+/** Normalize from API (string[] or { email, enabled }[]) to form state */
+function normalizeRecipients(
+  raw: string[] | { email: string; enabled?: boolean }[] | undefined
+): { email: string; enabled: boolean }[] {
+  if (!raw || !Array.isArray(raw) || raw.length === 0) return [{ email: "", enabled: true }];
+  return raw.map((r) =>
+    typeof r === "string"
+      ? { email: r, enabled: true }
+      : { email: r.email || "", enabled: r.enabled !== false }
+  );
+}
 
 interface TemperatureAlertSettingsProps {
   deviceId: string;
@@ -19,7 +31,7 @@ interface TemperatureAlertSettingsProps {
     sensorChannel?: string | null;
     minTemperature: number;
     maxTemperature: number;
-    emailRecipients: string[];
+    emailRecipients: string[] | { email: string; enabled?: boolean }[];
     enabled: boolean;
     alertCooldown: number;
   } | null;
@@ -27,7 +39,7 @@ interface TemperatureAlertSettingsProps {
     sensorChannel?: string | null;
     minTemperature: number;
     maxTemperature: number;
-    emailRecipients: string[];
+    emailRecipients: string[] | { email: string; enabled?: boolean }[];
     enabled: boolean;
     alertCooldown: number;
   } | null;
@@ -35,7 +47,7 @@ interface TemperatureAlertSettingsProps {
     sensorChannel?: string | null;
     minTemperature: number;
     maxTemperature: number;
-    emailRecipients: string[];
+    emailRecipients: string[] | { email: string; enabled?: boolean }[];
     enabled: boolean;
     alertCooldown: number;
   } | null;
@@ -46,7 +58,7 @@ interface AlertFormState {
   maxTemp: number;
   enabled: boolean;
   cooldown: number;
-  emailRecipients: string[];
+  emailRecipients: { email: string; enabled: boolean }[];
 }
 
 export function TemperatureAlertSettings({
@@ -65,29 +77,30 @@ export function TemperatureAlertSettings({
     maxTemp: initialSettings?.maxTemperature ?? 30,
     enabled: initialSettings?.enabled ?? true,
     cooldown: initialSettings?.alertCooldown ?? 300,
-    emailRecipients: initialSettings?.emailRecipients || [""],
+    emailRecipients: normalizeRecipients(initialSettings?.emailRecipients),
   });
-  
+
   // CH1 settings (TS302)
   const [ch1Alert, setCh1Alert] = useState<AlertFormState>({
     minTemp: initialSettingsCH1?.minTemperature ?? 0,
     maxTemp: initialSettingsCH1?.maxTemperature ?? 30,
     enabled: initialSettingsCH1?.enabled ?? true,
     cooldown: initialSettingsCH1?.alertCooldown ?? 300,
-    emailRecipients: initialSettingsCH1?.emailRecipients || [""],
+    emailRecipients: normalizeRecipients(initialSettingsCH1?.emailRecipients),
   });
-  
+
   // CH2 settings (TS302)
   const [ch2Alert, setCh2Alert] = useState<AlertFormState>({
     minTemp: initialSettingsCH2?.minTemperature ?? 0,
     maxTemp: initialSettingsCH2?.maxTemperature ?? 30,
     enabled: initialSettingsCH2?.enabled ?? true,
     cooldown: initialSettingsCH2?.alertCooldown ?? 300,
-    emailRecipients: initialSettingsCH2?.emailRecipients || [""],
+    emailRecipients: normalizeRecipients(initialSettingsCH2?.emailRecipients),
   });
   
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
+  const [togglingEnabled, setTogglingEnabled] = useState<string | null>(null); // "single" | "CH1" | "CH2"
 
   const handleSave = async (channel?: "CH1" | "CH2" | null) => {
     setIsSaving(true);
@@ -97,10 +110,11 @@ export function TemperatureAlertSettings({
       
       const result = await saveTemperatureAlert({
         deviceId,
+        deviceName,
         sensorChannel: channel || null,
         minTemperature: alert.minTemp,
         maxTemperature: alert.maxTemp,
-        emailRecipients: alert.emailRecipients.filter((e) => e.trim() !== ""),
+        emailRecipients: alert.emailRecipients,
         enabled: alert.enabled,
         alertCooldown: alert.cooldown,
       });
@@ -146,6 +160,47 @@ export function TemperatureAlertSettings({
     }
   };
 
+  const handleEnabledToggle = async (
+    channel: "CH1" | "CH2" | null,
+    checked: boolean
+  ) => {
+    const key = channel ?? "single";
+    const alert = channel === "CH1" ? ch1Alert : channel === "CH2" ? ch2Alert : singleAlert;
+    const setAlert = channel === "CH1" ? setCh1Alert : channel === "CH2" ? setCh2Alert : setSingleAlert;
+    const hasExisting = channel === "CH1" ? !!initialSettingsCH1 : channel === "CH2" ? !!initialSettingsCH2 : !!initialSettings;
+
+    const previousEnabled = alert.enabled;
+    setAlert({ ...alert, enabled: checked });
+
+    if (!hasExisting) {
+      // No saved alert yet; just update local state. Will persist when user clicks Save.
+      return;
+    }
+
+    setTogglingEnabled(key);
+    try {
+      const result = await setTemperatureAlertEnabled(deviceId, channel, checked);
+      if (result.success) {
+        toast.success(
+          checked ? "Notifications enabled" : "Notifications disabled",
+          {
+            description: `Temperature alerts ${checked ? "on" : "off"} for ${channel || "this device"} on ${deviceName}`,
+          }
+        );
+      } else {
+        setAlert({ ...alert, enabled: previousEnabled });
+        toast.error(result.error ?? "Failed to update notifications");
+      }
+    } catch (error: any) {
+      setAlert({ ...alert, enabled: previousEnabled });
+      toast.error("Failed to update notifications", {
+        description: error.message,
+      });
+    } finally {
+      setTogglingEnabled(null);
+    }
+  };
+
   const handleDelete = async (channel?: "CH1" | "CH2" | null) => {
     const confirmMessage = channel 
       ? `Are you sure you want to delete the ${channel} temperature alert?`
@@ -171,7 +226,7 @@ export function TemperatureAlertSettings({
             maxTemp: 30,
             enabled: true,
             cooldown: 300,
-            emailRecipients: [""],
+            emailRecipients: [{ email: "", enabled: true }],
           });
         } else if (channel === "CH2") {
           setCh2Alert({
@@ -179,7 +234,7 @@ export function TemperatureAlertSettings({
             maxTemp: 30,
             enabled: true,
             cooldown: 300,
-            emailRecipients: [""],
+            emailRecipients: [{ email: "", enabled: true }],
           });
         } else {
           setSingleAlert({
@@ -187,7 +242,7 @@ export function TemperatureAlertSettings({
             maxTemp: 30,
             enabled: true,
             cooldown: 300,
-            emailRecipients: [""],
+            emailRecipients: [{ email: "", enabled: true }],
           });
         }
       } else {
@@ -296,24 +351,39 @@ export function TemperatureAlertSettings({
             Email Recipients for Alerts{channelName}
           </Label>
           <p className="text-xs text-muted-foreground mb-2">
-            Enter email addresses that will receive temperature alert notifications
+            Add email addresses and use the switch to enable or disable notifications per recipient
           </p>
 
           <div className="space-y-2">
-            {alert.emailRecipients.map((email, index) => (
-              <div key={index} className="flex gap-2">
+            {alert.emailRecipients.map((recipient, index) => (
+              <div key={index} className="flex items-center gap-2 flex-wrap">
                 <Input
                   type="email"
-                  value={email}
+                  value={recipient.email}
                   onChange={(e) => {
-                    const updated = [...alert.emailRecipients];
-                    updated[index] = e.target.value;
+                    const updated = alert.emailRecipients.map((r, i) =>
+                      i === index ? { ...r, email: e.target.value } : r
+                    );
                     setAlert({ ...alert, emailRecipients: updated });
                   }}
                   placeholder="engineer@company.com"
-                  className="text-sm"
-                  required
+                  className="text-sm flex-1 min-w-[160px]"
                 />
+                <div className="flex items-center gap-2 shrink-0">
+                  <Label htmlFor={`email-notif-${channelLabel}-${index}`} className="text-xs whitespace-nowrap">
+                    Notifications
+                  </Label>
+                  <Switch
+                    id={`email-notif-${channelLabel}-${index}`}
+                    checked={recipient.enabled}
+                    onCheckedChange={(checked) => {
+                      const updated = alert.emailRecipients.map((r, i) =>
+                        i === index ? { ...r, enabled: checked } : r
+                      );
+                      setAlert({ ...alert, emailRecipients: updated });
+                    }}
+                  />
+                </div>
                 {alert.emailRecipients.length > 1 && (
                   <Button
                     type="button"
@@ -338,7 +408,12 @@ export function TemperatureAlertSettings({
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => setAlert({ ...alert, emailRecipients: [...alert.emailRecipients, ""] })}
+            onClick={() =>
+              setAlert({
+                ...alert,
+                emailRecipients: [...alert.emailRecipients, { email: "", enabled: true }],
+              })
+            }
             className="w-full text-xs"
           >
             <FaPlus className="mr-2 h-3 w-3" />
@@ -397,12 +472,13 @@ export function TemperatureAlertSettings({
               </div>
               <div className="flex items-center gap-2">
                 <Label htmlFor="alert-enabled-ch1" className="text-xs">
-                  {ch1Alert.enabled ? "Enabled" : "Disabled"}
+                  Notifications {ch1Alert.enabled ? "on" : "off"}
                 </Label>
                 <Switch
                   id="alert-enabled-ch1"
                   checked={ch1Alert.enabled}
-                  onCheckedChange={(checked) => setCh1Alert({ ...ch1Alert, enabled: checked })}
+                  onCheckedChange={(checked) => handleEnabledToggle("CH1", checked)}
+                  disabled={togglingEnabled === "CH1"}
                 />
               </div>
             </div>
@@ -427,12 +503,13 @@ export function TemperatureAlertSettings({
               </div>
               <div className="flex items-center gap-2">
                 <Label htmlFor="alert-enabled-ch2" className="text-xs">
-                  {ch2Alert.enabled ? "Enabled" : "Disabled"}
+                  Notifications {ch2Alert.enabled ? "on" : "off"}
                 </Label>
                 <Switch
                   id="alert-enabled-ch2"
                   checked={ch2Alert.enabled}
-                  onCheckedChange={(checked) => setCh2Alert({ ...ch2Alert, enabled: checked })}
+                  onCheckedChange={(checked) => handleEnabledToggle("CH2", checked)}
+                  disabled={togglingEnabled === "CH2"}
                 />
               </div>
             </div>
@@ -461,12 +538,13 @@ export function TemperatureAlertSettings({
           </div>
           <div className="flex items-center gap-2">
             <Label htmlFor="alert-enabled" className="text-xs">
-              {singleAlert.enabled ? "Enabled" : "Disabled"}
+              Notifications {singleAlert.enabled ? "on" : "off"}
             </Label>
             <Switch
               id="alert-enabled"
               checked={singleAlert.enabled}
-              onCheckedChange={(checked) => setSingleAlert({ ...singleAlert, enabled: checked })}
+              onCheckedChange={(checked) => handleEnabledToggle(null, checked)}
+              disabled={togglingEnabled === "single"}
             />
           </div>
         </div>
