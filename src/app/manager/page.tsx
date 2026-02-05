@@ -21,7 +21,6 @@ async function getManagerStats() {
     onlineDevices,
     totalGateways,
     onlineGateways,
-    recentTelemetry,
     devicesRaw,
   ] = await Promise.all([
     prisma.user.count({ where: { role: Role.EMPLOYEE } }),
@@ -40,10 +39,6 @@ async function getManagerStats() {
     prisma.milesightDeviceCache.count({ where: { lastStatus: "ONLINE" } }),
     prisma.milesightDeviceCache.count({ where: { deviceType: "UG65" } }),
     prisma.milesightDeviceCache.count({ where: { deviceType: "UG65", lastStatus: "ONLINE" } }),
-    prisma.milesightDeviceTelemetry.findMany({
-      take: 2000, // Increased to fetch more history
-      orderBy: { dataTimestamp: "desc" },
-    }),
     prisma.milesightDeviceCache.findMany({
       orderBy: [
         { displayOrder: "asc" },
@@ -52,27 +47,34 @@ async function getManagerStats() {
     }),
   ]);
 
-  // Sort devices: displayOrder 1, 2, 3, 4... then null/0 values last
-  // Use stable sort (by deviceId) for devices with same displayOrder to maintain DOM order
   const devices = devicesRaw.sort((a, b) => {
-    // Treat null or 0 as "unset" - they appear last
     const orderA = (a.displayOrder && a.displayOrder > 0) ? a.displayOrder : 9999;
     const orderB = (b.displayOrder && b.displayOrder > 0) ? b.displayOrder : 9999;
     if (orderA !== orderB) {
       return orderA - orderB;
     }
-    // If same order, use deviceId for stable sorting (maintains DOM order)
     return a.deviceId.localeCompare(b.deviceId);
   });
 
-  // Calculate averages from latest telemetry
-  const latestByDevice = new Map();
-  recentTelemetry.forEach((t) => {
-    if (!latestByDevice.has(t.deviceId)) {
-      latestByDevice.set(t.deviceId, t);
+  // Fetch telemetry per device (so every device gets its own recent data on the dashboard)
+  const telemetryByDevice = new Map<string, Awaited<ReturnType<typeof prisma.milesightDeviceTelemetry.findMany>>>();
+  await Promise.all(
+    devices.map(async (device) => {
+      const list = await prisma.milesightDeviceTelemetry.findMany({
+        where: { deviceId: device.deviceId },
+        orderBy: { dataTimestamp: "desc" },
+        take: 200,
+      });
+      telemetryByDevice.set(device.deviceId, list);
+    })
+  );
+
+  const latestByDevice = new Map<string, (typeof telemetryByDevice extends Map<string, infer V> ? V[number] : never)>();
+  telemetryByDevice.forEach((list, deviceId) => {
+    if (list.length > 0) {
+      latestByDevice.set(deviceId, list[0]);
     }
   });
-
   const latestReadings = Array.from(latestByDevice.values());
   const avgTemperature =
     latestReadings.filter((t) => t.temperature !== null).length > 0
@@ -81,15 +83,6 @@ async function getManagerStats() {
           .reduce((sum, t) => sum + (t.temperature || 0), 0) /
         latestReadings.filter((t) => t.temperature !== null).length
       : null;
-
-  // Group telemetry by device
-  const telemetryByDevice = new Map<string, typeof recentTelemetry>();
-  recentTelemetry.forEach((t) => {
-    if (!telemetryByDevice.has(t.deviceId)) {
-      telemetryByDevice.set(t.deviceId, []);
-    }
-    telemetryByDevice.get(t.deviceId)!.push(t);
-  });
 
   // Fetch temperature alerts for all devices
   const temperatureAlerts = await prisma.temperatureAlert.findMany({

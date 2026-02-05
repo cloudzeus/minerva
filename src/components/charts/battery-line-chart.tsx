@@ -24,14 +24,26 @@ export function BatteryLineChart({
   data,
   title = "BATTERY LEVEL TRENDS",
 }: BatteryLineChartProps) {
-  // Prepare chart data
+  // Prepare chart data: use top-level battery, or derive from sensorData/payload (battery / battery_level / electricity)
   const chartData = data
+    .map((d) => {
+      let bat: number | null = d.battery !== null && d.battery !== undefined ? d.battery : null;
+      if (bat === null) {
+        const raw = d.sensorData || d.payload;
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw) as Record<string, unknown>;
+            const b = parsed.battery ?? parsed.battery_level ?? parsed.batteryLevel ?? parsed.electricity;
+            if (typeof b === "number" && !isNaN(b)) bat = Math.round(b);
+            else if (typeof b === "string" && b.trim() !== "") bat = parseInt(b, 10);
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+      return { timestamp: Number(d.dataTimestamp), battery: bat, deviceName: d.deviceName };
+    })
     .filter((d) => d.battery !== null)
-    .map((d) => ({
-      timestamp: Number(d.dataTimestamp),
-      battery: d.battery,
-      deviceName: d.deviceName,
-    }))
     .sort((a, b) => a.timestamp - b.timestamp);
 
   if (chartData.length === 0) {

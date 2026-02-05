@@ -114,47 +114,51 @@ export function DeviceTelemetryCard({
     "snr",
   ];
 
+  // Helper: get parsed sensor payload (sensorData or payload column) so devices with either format work
+  const getSensorPayload = (d: MilesightDeviceTelemetry): Record<string, unknown> => {
+    const raw = d.sensorData || d.payload;
+    if (!raw) return {};
+    try {
+      return JSON.parse(raw) as Record<string, unknown>;
+    } catch {
+      return {};
+    }
+  };
+
   // Detect all available properties dynamically - FILTER OUT garbage
   const allProperties = React.useMemo(() => {
     const props = new Set<string>();
-    const GARBAGE_PROPS = ["mutation", "temperature"]; // Generic "temperature" without _left/_right is garbage
+    const GARBAGE_PROPS = ["mutation", "timestamp"]; // Exclude non-numeric / noise keys (timestamp is metadata)
     
     telemetryData.forEach((d) => {
-      if (d.sensorData) {
-        const sensorData = JSON.parse(d.sensorData);
-        Object.keys(sensorData).forEach((key) => {
-          const value = sensorData[key];
-          const keyLower = key.toLowerCase();
-          
-          // Only include numeric values AND exclude garbage properties
-          if (typeof value === "number" && !GARBAGE_PROPS.includes(keyLower)) {
-            props.add(key);
-          }
-        });
-      }
-      
-      // Also check database battery field if sensorData doesn't have it
-      if (d.battery !== null && d.battery !== undefined) {
-        // Add battery if not already in props (check all variations)
-        const hasBattery = Array.from(props).some(p => 
-          p.toLowerCase().includes("battery") || p === "electricity"
-        );
-        if (!hasBattery) {
-          props.add("battery");
+      const payload = getSensorPayload(d);
+      Object.keys(payload).forEach((key) => {
+        const value = payload[key];
+        const keyLower = key.toLowerCase();
+        if (typeof value === "number" && !GARBAGE_PROPS.includes(keyLower)) {
+          props.add(key);
         }
-      }
+      });
       
-      // Also check database battery field if sensorData doesn't have it
-      if (d.battery !== null && d.battery !== undefined) {
-        // Add battery if not already in props (check all variations)
-        const hasBattery = Array.from(props).some(p => 
-          p.toLowerCase().includes("battery") || p === "electricity"
+      // Top-level DB columns as fallback when payload missing or different structure
+      if (d.temperature !== null && d.temperature !== undefined) {
+        const hasTemp = Array.from(props).some(
+          (p) => p === "temperature" || p === "temperature_left" || p === "temperature_right"
         );
-        if (!hasBattery) {
-          props.add("battery");
-        }
+        if (!hasTemp) props.add("temperature");
+      }
+      if (d.battery !== null && d.battery !== undefined) {
+        const hasBattery = Array.from(props).some(
+          (p) => p.toLowerCase().includes("battery") || p === "electricity"
+        );
+        if (!hasBattery) props.add("battery");
       }
     });
+    
+    // For dual-sensor devices (temperature_left / temperature_right), exclude generic "temperature" to avoid duplicate
+    if (props.has("temperature_left") || props.has("temperature_right")) {
+      props.delete("temperature");
+    }
     
     // Use custom display order if provided, otherwise use default order
     if (sensorDisplayOrder && sensorDisplayOrder.length > 0) {
@@ -181,23 +185,19 @@ export function DeviceTelemetryCard({
   const latestValues = React.useMemo(() => {
     const values: Record<string, any> = {};
     
-    // Search through telemetry data (already sorted by dataTimestamp desc) to find latest non-null values
     for (const reading of telemetryData) {
-      if (reading.sensorData) {
+      const raw = reading.sensorData || reading.payload;
+      if (raw) {
         try {
-          const sensorData = JSON.parse(reading.sensorData);
-          
-          // For each property in sensorData, use the first (latest) non-null value we find
-          Object.keys(sensorData).forEach((key) => {
-            const val = sensorData[key];
-            // Only set if we haven't found a value for this property yet and it's a valid number
-            // Note: 0 is a valid value (could be temperature), so check for null/undefined specifically
+          const payload = JSON.parse(raw) as Record<string, unknown>;
+          Object.keys(payload).forEach((key) => {
+            const val = payload[key];
             if (!(key in values) && val !== null && val !== undefined && typeof val === "number" && !isNaN(val)) {
               values[key] = val;
             }
           });
         } catch (e) {
-          console.error(`[${deviceName}] Failed to parse sensorData:`, e);
+          console.error(`[${deviceName}] Failed to parse sensor payload:`, e);
         }
       }
       
@@ -219,14 +219,14 @@ export function DeviceTelemetryCard({
 
   // Get battery percentage and capacity from sensor data - check all possible field names
   const batteryInfo = React.useMemo(() => {
-    if (!latestReading?.sensorData) {
-      // Fallback to database field if sensorData is not available
+    const raw = latestReading?.sensorData || latestReading?.payload;
+    if (!raw) {
       if (latestReading?.battery !== null && latestReading?.battery !== undefined) {
         return { percentage: latestReading.battery, capacity: null };
       }
       return { percentage: null, capacity: null };
     }
-    const sensorData = JSON.parse(latestReading.sensorData);
+    const sensorData = (() => { try { return JSON.parse(raw); } catch { return {}; } })();
     
     // Check for battery percentage in various field names
     const batteryPercentage = 
@@ -251,30 +251,26 @@ export function DeviceTelemetryCard({
     };
   }, [latestReading]);
 
-  // Prepare chart data with ALL numeric properties
-  // Sort by timestamp to ensure chronological order
+  // Prepare chart data with ALL numeric properties (use payload or top-level DB columns)
   const allData = React.useMemo(() => {
     return telemetryData
       .map((d) => {
-        const sensorData = d.sensorData ? JSON.parse(d.sensorData) : {};
+        const payload = getSensorPayload(d);
         const dataPoint: any = {
           timestamp: Number(d.dataTimestamp),
           date: new Date(Number(d.dataTimestamp)),
         };
-        
-        // Add all numeric properties to data point
         allProperties.forEach((prop) => {
-          const value = sensorData[prop];
-          if (typeof value === "number" && !isNaN(value)) {
-            dataPoint[prop] = value;
-          } else {
-            dataPoint[prop] = null;
+          let value = payload[prop];
+          if (typeof value !== "number" || isNaN(value)) {
+            if (prop === "temperature" && d.temperature != null) value = d.temperature;
+            else if ((prop === "battery" || prop === "battery_level") && d.battery != null) value = d.battery;
           }
+          dataPoint[prop] = typeof value === "number" && !isNaN(value) ? value : null;
         });
-        
         return dataPoint;
       })
-      .filter((d) => d.timestamp && !isNaN(d.timestamp)) // Filter out invalid timestamps
+      .filter((d) => d.timestamp && !isNaN(d.timestamp))
       .sort((a, b) => a.timestamp - b.timestamp);
   }, [telemetryData, allProperties]);
 
@@ -327,11 +323,17 @@ export function DeviceTelemetryCard({
       return rangeStart + (index + 0.5) * intervalDuration; // Use midpoint of interval
     });
 
-    // For each target timestamp, find the closest data point or use average from nearby points
-    // Since devices send data every 20 minutes, we should always find a value
-    const chartPoints = targetTimestamps.map((targetTime, index) => {
-      // Find nearby points within a reasonable window (e.g., 1 hour)
-      const searchWindow = 60 * 60 * 1000; // 1 hour window
+    // Search window scales with time range so sparse data still gets points (24h/7d need larger window)
+    const searchWindow =
+      timeRange === "30d"
+        ? 3 * 24 * 60 * 60 * 1000
+        : timeRange === "7d"
+          ? 12 * 60 * 60 * 1000
+          : timeRange === "24h"
+            ? 3 * 60 * 60 * 1000
+            : 60 * 60 * 1000;
+
+    const chartPoints = targetTimestamps.map((targetTime) => {
       const nearbyPoints = sortedData.filter((point) => {
         return Math.abs(point.timestamp - targetTime) <= searchWindow;
       });
@@ -391,15 +393,38 @@ export function DeviceTelemetryCard({
         }
       });
 
+      // Map alternate property names to standard chart keys so Bars (dataKey="temperature_left" etc.) find values
+      entry.temperature_left =
+        entry.temperature_left ??
+        entry["Temperature Left"] ??
+        entry["Data Left"] ??
+        null;
+      entry.temperature_right =
+        entry.temperature_right ??
+        entry["Temperature Right"] ??
+        entry["Data Right"] ??
+        null;
+      entry.temperature =
+        entry.temperature ??
+        entry["Temperature Left"] ??
+        entry["Data Left"] ??
+        entry.temperature_left ??
+        null;
+
       return entry;
     });
 
     return chartPoints;
   }, [filteredData, timeRange, timeRanges, allProperties]);
 
-  // Only show temperature_left and temperature_right in chart
-  const hasTemperatureLeft = allProperties.includes("temperature_left");
-  const hasTemperatureRight = allProperties.includes("temperature_right");
+  // Property name variants: devices may send "Temperature Left", "Data Left", "Data Right" instead of temperature_left / temperature_right
+  const TEMP_LEFT_KEYS = ["temperature_left", "Temperature Left", "Data Left"];
+  const TEMP_RIGHT_KEYS = ["temperature_right", "Temperature Right", "Data Right"];
+  const TEMP_SINGLE_KEYS = ["temperature", "Temperature", "Temperature Left", "Data Left"];
+
+  const hasTemperatureLeft = allProperties.some((p) => TEMP_LEFT_KEYS.includes(p));
+  const hasTemperatureRight = allProperties.some((p) => TEMP_RIGHT_KEYS.includes(p));
+  const hasTemperature = allProperties.some((p) => TEMP_SINGLE_KEYS.includes(p));
 
   // Use custom sensor names if available, otherwise use defaults
   const leftSensorLabel = sensorNameLeft || "CH1";
@@ -421,6 +446,10 @@ export function DeviceTelemetryCard({
 
   // Chart configuration for shadcn with min/max in labels
   const chartConfig = {
+    temperature: {
+      label: "Temperature",
+      color: "hsl(var(--chart-1))",
+    },
     temperature_left: {
       label: hasTemperatureLeft && temperatureStats.left.min !== null && temperatureStats.left.max !== null
         ? `${leftSensorLabel} (Min: ${temperatureStats.left.min.toFixed(1)}°C, Max: ${temperatureStats.left.max.toFixed(1)}°C)`
@@ -437,30 +466,29 @@ export function DeviceTelemetryCard({
 
   // Get properties to display in sensor readings - always include battery if available
   const displayProperties = React.useMemo(() => {
-    // Priority: temperature_left, temperature_right, then ONE battery field
+    // Priority: temperature_left, temperature_right, temperature (single-sensor), then ONE battery field
     const result: string[] = [];
     
-    // Add temperature_left if available
     if (allProperties.includes("temperature_left")) {
       result.push("temperature_left");
     }
-    
-    // Add temperature_right if available
     if (allProperties.includes("temperature_right")) {
       result.push("temperature_right");
     }
+    // Single-sensor temperature (e.g. TS301)
+    if (allProperties.includes("temperature")) {
+      result.push("temperature");
+    }
     
-    // Add ONE battery field (prefer "battery" over "battery_level" or "electricity")
     const batteryFields = ["battery", "battery_level", "batteryLevel", "electricity"];
     for (const batteryField of batteryFields) {
       if (allProperties.includes(batteryField)) {
         result.push(batteryField);
-        break; // Only add one battery field
+        break;
       }
     }
     
-    // Limit to top 3 to show: temp_left, temp_right, and battery
-    return result.slice(0, 3);
+    return result.slice(0, 4);
   }, [allProperties]);
 
   return (
@@ -624,7 +652,7 @@ export function DeviceTelemetryCard({
             </div>
 
             {/* Temperature Bar Chart - Multiple */}
-            {chartData.length > 0 && (hasTemperatureLeft || hasTemperatureRight) ? (
+            {chartData.length > 0 && (hasTemperatureLeft || hasTemperatureRight || hasTemperature) ? (
               <ChartContainer config={chartConfig}>
                 <BarChart accessibilityLayer data={chartData}>
                   <CartesianGrid vertical={false} />
@@ -633,9 +661,9 @@ export function DeviceTelemetryCard({
                     tickLine={false}
                     tickMargin={10}
                     axisLine={false}
-                    minTickGap={20}
-                    interval={0}
-                    tick={{ fill: "#000000", fontWeight: "bold", fontSize: "14px" }}
+                    minTickGap={timeRange === "24h" ? 38 : timeRange === "7d" ? 48 : timeRange === "30d" ? 56 : 20}
+                    interval={timeRange === "24h" ? 1 : 0}
+                    tick={{ fill: "#000000", fontWeight: "bold", fontSize: timeRange === "24h" || timeRange === "7d" ? "11px" : "14px" }}
                     tickFormatter={(value) => {
                       try {
                         const timestamp = Number(value);
@@ -643,24 +671,25 @@ export function DeviceTelemetryCard({
                         const date = new Date(timestamp);
                         if (isNaN(date.getTime())) return "";
 
-                        // Calculate interval duration based on time range
                         const rangeNow = Date.now();
-                        const rangeEnd = rangeNow;
                         const rangeStart = rangeNow - timeRanges[timeRange];
-                        const intervalDuration = rangeEnd - rangeStart;
+                        const intervalDuration = rangeNow - rangeStart;
                         const intervalDurationPerBar = intervalDuration / 10;
 
-                        // Format based on interval duration per bar
-                        // For intervals < 1 hour (6 minutes per bar): show HH:mm
-                        // For intervals < 24 hours (144 minutes per bar): show MMM d HH:mm
-                        // For intervals >= 24 hours (16.8 hours per bar): show MMM d
+                        // Short formats to prevent label overflow: 24h = HH:mm, 7d = dd HH:mm, 30d = dd/MM
+                        if (timeRange === "24h") {
+                          return format(date, "HH:mm");
+                        }
+                        if (timeRange === "7d") {
+                          return format(date, "dd HH:mm");
+                        }
+                        if (timeRange === "30d") {
+                          return format(date, "dd/MM");
+                        }
                         if (intervalDurationPerBar < 60 * 60 * 1000) {
                           return format(date, "HH:mm");
                         }
-                        if (intervalDurationPerBar < 24 * 60 * 60 * 1000) {
-                          return format(date, "MMM d HH:mm");
-                        }
-                        return format(date, "MMM d");
+                        return format(date, "HH:mm");
                       } catch (error) {
                         return "";
                       }
@@ -785,6 +814,15 @@ export function DeviceTelemetryCard({
                       }}
                       ifOverflow="extendDomain"
                     />
+                  )}
+                  {hasTemperature && (
+                    <Bar dataKey="temperature" fill="var(--color-temperature)" radius={4} maxBarSize={30}>
+                      {chartData.map((entry: any, index: number) => {
+                        const value = entry.temperature;
+                        const fillColor = "var(--color-temperature)";
+                        return <Cell key={`cell-temp-${index}`} fill={fillColor} />;
+                      })}
+                    </Bar>
                   )}
                   {hasTemperatureLeft && (
                     <Bar dataKey="temperature_left" fill="var(--color-temperature_left)" radius={4} maxBarSize={30}>

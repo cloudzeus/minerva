@@ -47,15 +47,18 @@ export function MultiMeasurementChart({
     maxTemperatureCH2,
   });
 
-  // Prepare chart data with all measurements
+  // Prepare chart data: use top-level fields, fallback to sensorData/payload for any nulls
   const chartData = data
     .map((d) => {
-      const parsed = d.sensorData ? JSON.parse(d.sensorData) : {};
+      const raw = d.sensorData || d.payload;
+      const parsed = raw ? (() => { try { return JSON.parse(raw); } catch { return {}; } })() : {};
+      const num = (v: unknown): number | undefined =>
+        typeof v === "number" && !isNaN(v) ? v : typeof v === "string" && v.trim() !== "" ? parseFloat(v) : undefined;
       return {
         timestamp: Number(d.dataTimestamp),
-        temperature: d.temperature,
-        humidity: d.humidity,
-        battery: d.battery,
+        temperature: d.temperature ?? num(parsed.temperature) ?? num(parsed.temperature_left) ?? num(parsed.temperature_right),
+        humidity: d.humidity ?? num(parsed.humidity) ?? num(parsed.hum),
+        battery: d.battery ?? num(parsed.battery) ?? num(parsed.battery_level) ?? num(parsed.electricity),
         temperature_left: parsed.temperature_left,
         temperature_right: parsed.temperature_right,
       };

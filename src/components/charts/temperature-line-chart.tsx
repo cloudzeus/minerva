@@ -30,14 +30,25 @@ export function TemperatureLineChart({
   minTemperature,
   maxTemperature,
 }: TemperatureLineChartProps) {
-  // Prepare chart data
+  // Prepare chart data: use top-level temperature, or derive from sensorData/payload (temperature / temperature_left / temperature_right)
   const chartData = data
+    .map((d) => {
+      let temp: number | null = d.temperature ?? null;
+      if (temp === null) {
+        const raw = d.sensorData || d.payload;
+        if (raw) {
+          try {
+            const parsed = JSON.parse(raw) as Record<string, unknown>;
+            const t = parsed.temperature ?? parsed.temperature_left ?? parsed.temperature_right;
+            if (typeof t === "number" && !isNaN(t)) temp = t;
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+      return { timestamp: Number(d.dataTimestamp), temperature: temp, deviceName: d.deviceName };
+    })
     .filter((d) => d.temperature !== null)
-    .map((d) => ({
-      timestamp: Number(d.dataTimestamp),
-      temperature: d.temperature,
-      deviceName: d.deviceName,
-    }))
     .sort((a, b) => a.timestamp - b.timestamp);
 
   if (chartData.length === 0) {

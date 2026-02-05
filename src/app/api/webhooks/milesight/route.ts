@@ -189,14 +189,21 @@ export async function POST(request: NextRequest) {
           console.log("Data Payload Keys:", Object.keys(dataPayload));
           console.log("Full Data Payload:", JSON.stringify(dataPayload, null, 2));
           
-          // Extract common sensor values
+          // Extract common sensor values (support multiple key names from different sensor types)
           const temperature =
-            dataPayload.temperature ||
-            dataPayload.temperature_left ||
-            dataPayload.temperature_right ||
+            dataPayload.temperature ??
+            dataPayload.temperature_left ??
+            dataPayload.temperature_right ??
+            dataPayload.temp ??
             null;
-          const humidity = dataPayload.humidity || null;
-          const battery = dataPayload.battery || null;
+          const humidity =
+            dataPayload.humidity ?? dataPayload.hum ?? null;
+          const battery =
+            dataPayload.battery ??
+            dataPayload.battery_level ??
+            dataPayload.batteryLevel ??
+            dataPayload.electricity ??
+            null;
 
           console.log("Extracted Values:", {
             temperature,
