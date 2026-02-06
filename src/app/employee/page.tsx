@@ -1,4 +1,4 @@
-import { Role } from "@prisma/client";
+import { Role, MilesightDeviceTelemetry } from "@prisma/client";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { StatsCard } from "@/components/stats-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +11,8 @@ import { RealtimeStatsCards } from "@/components/realtime-stats-cards";
 import { RealtimeDeviceCard } from "@/components/realtime-device-card";
 import { ExportTelemetryButton } from "@/components/export-telemetry-button";
 import { AutoRefresh } from "@/components/auto-refresh";
+
+export const dynamic = "force-dynamic";
 
 async function getEmployeeStats(userId: string) {
   const [
@@ -67,7 +69,7 @@ async function getEmployeeStats(userId: string) {
   );
 
   // Flatten for avg temperature (latest per device)
-  const latestByDevice = new Map<string, (typeof telemetryByDevice extends Map<string, infer V> ? V[number] : never)>();
+  const latestByDevice = new Map<string, MilesightDeviceTelemetry>();
   telemetryByDevice.forEach((list, deviceId) => {
     if (list.length > 0) {
       latestByDevice.set(deviceId, list[0]);

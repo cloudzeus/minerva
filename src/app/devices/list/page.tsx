@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { DeviceListTable } from "./device-list-table";
 import { RealtimeDeviceList } from "@/components/realtime-device-list";
 
+export const dynamic = "force-dynamic";
+
 async function getAllDevices() {
   return await prisma.milesightDeviceCache.findMany({
     include: {

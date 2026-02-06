@@ -17,6 +17,8 @@ import { getMilesightConnectionStatus } from "@/lib/milesight";
 import { Badge } from "@/components/ui/badge";
 import { formatDateTime } from "@/lib/utils";
 
+export const dynamic = "force-dynamic";
+
 async function getMilesightSettings() {
   const settings = await prisma.milesightSettings.findFirst({
     orderBy: { createdAt: "desc" },

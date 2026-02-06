@@ -5,6 +5,8 @@ import { FaUsers } from "react-icons/fa";
 import { prisma } from "@/lib/prisma";
 import { UsersDataTableEnhanced } from "@/components/users-data-table-enhanced";
 
+export const dynamic = "force-dynamic";
+
 async function getUsers() {
   return await prisma.user.findMany({
     orderBy: { createdAt: "desc" },

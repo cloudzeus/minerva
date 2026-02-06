@@ -7,6 +7,8 @@ import { getCurrentUser } from "@/lib/auth-helpers";
 import { DataTable } from "@/components/data-table/data-table";
 import { activityColumns } from "@/app/admin/activity/columns";
 
+export const dynamic = "force-dynamic";
+
 async function getMyActivity(userId: string) {
   return await prisma.activityLog.findMany({
     where: { userId },

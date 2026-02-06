@@ -6,6 +6,8 @@ import { prisma } from "@/lib/prisma";
 import { DataTable } from "@/components/data-table/data-table";
 import { activityColumns } from "./columns";
 
+export const dynamic = "force-dynamic";
+
 async function getActivityLogs() {
   return await prisma.activityLog.findMany({
     take: 100,

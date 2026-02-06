@@ -1,4 +1,4 @@
-import { Role } from "@prisma/client";
+import { Role, MilesightDeviceTelemetry } from "@prisma/client";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { StatsCard } from "@/components/stats-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +11,8 @@ import { RealtimeDeviceCard } from "@/components/realtime-device-card";
 import { ExportTelemetryButton } from "@/components/export-telemetry-button";
 import { getCurrentUser } from "@/lib/auth-helpers";
 import { AutoRefresh } from "@/components/auto-refresh";
+
+export const dynamic = "force-dynamic";
 
 async function getManagerStats() {
   const [
@@ -69,7 +71,7 @@ async function getManagerStats() {
     })
   );
 
-  const latestByDevice = new Map<string, (typeof telemetryByDevice extends Map<string, infer V> ? V[number] : never)>();
+  const latestByDevice = new Map<string, MilesightDeviceTelemetry>();
   telemetryByDevice.forEach((list, deviceId) => {
     if (list.length > 0) {
       latestByDevice.set(deviceId, list[0]);

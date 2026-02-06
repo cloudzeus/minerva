@@ -38,6 +38,8 @@ import { DeviceSensorOrderEditor } from "@/components/device-sensor-order-editor
 import { DeviceDisplayOrderEditor } from "@/components/device-display-order-editor";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
+export const dynamic = "force-dynamic";
+
 type DeviceWithTelemetry = MilesightDeviceCache & {
   telemetryData: MilesightDeviceTelemetry[];
 };

@@ -19,6 +19,8 @@ import { WebhookUrlDisplay } from "@/components/webhook-url-display";
 import { LiveWebhookIndicator } from "@/components/live-webhook-indicator";
 import { RecentWebhookEvents } from "@/components/recent-webhook-events";
 
+export const dynamic = "force-dynamic";
+
 async function getWebhookSettings() {
   const settings = await prisma.milesightWebhookSettings.findFirst({
     orderBy: { createdAt: "desc" },

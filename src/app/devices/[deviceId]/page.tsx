@@ -29,6 +29,8 @@ import { ExportTelemetryButton } from "@/components/export-telemetry-button";
 import { TemperatureAlertSettings } from "@/components/temperature-alert-settings";
 import { getTemperatureAlert } from "@/app/actions/temperature-alerts";
 
+export const dynamic = "force-dynamic";
+
 async function getDeviceWithTelemetry(deviceId: string) {
   return await prisma.milesightDeviceCache.findUnique({
     where: { deviceId },
