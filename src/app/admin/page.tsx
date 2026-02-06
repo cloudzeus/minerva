@@ -2,6 +2,7 @@ import { Role, MilesightDeviceTelemetry } from "@prisma/client";
 import { DashboardLayout } from "@/components/dashboard-layout";
 import { StatsCard } from "@/components/stats-card";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { prisma } from "@/lib/prisma";
 import { FaUsers, FaCrown, FaUserTie, FaUser } from "react-icons/fa";
 import { RealtimeStatsCards } from "@/components/realtime-stats-cards";
@@ -12,109 +13,140 @@ import { AutoRefresh } from "@/components/auto-refresh";
 
 export const dynamic = "force-dynamic";
 
-async function getDashboardStats() {
-  const [
-    totalUsers,
-    adminCount,
-    managerCount,
-    employeeCount,
-    totalDevices,
-    onlineDevices,
-    totalGateways,
-    onlineGateways,
-    devicesRaw,
-  ] = await Promise.all([
-    prisma.user.count(),
-    prisma.user.count({ where: { role: Role.ADMIN } }),
-    prisma.user.count({ where: { role: Role.MANAGER } }),
-    prisma.user.count({ where: { role: Role.EMPLOYEE } }),
-    prisma.milesightDeviceCache.count(),
-    prisma.milesightDeviceCache.count({ where: { lastStatus: "ONLINE" } }),
-    prisma.milesightDeviceCache.count({ where: { deviceType: "UG65" } }),
-    prisma.milesightDeviceCache.count({ where: { deviceType: "UG65", lastStatus: "ONLINE" } }),
-    prisma.milesightDeviceCache.findMany({
-      orderBy: [
-        { displayOrder: "asc" },
-        { lastSyncAt: "desc" },
-      ],
-    }),
-  ]);
+const fallbackStats = {
+  totalUsers: 0,
+  adminCount: 0,
+  managerCount: 0,
+  employeeCount: 0,
+  totalDevices: 0,
+  onlineDevices: 0,
+  avgTemperature: null as number | null,
+  totalGateways: 0,
+  onlineGateways: 0,
+  devices: [] as Awaited<ReturnType<typeof prisma.milesightDeviceCache.findMany>>,
+  telemetryByDevice: new Map<string, MilesightDeviceTelemetry[]>(),
+  alertsByDevice: new Map<string, { CH1?: { min: number; max: number }; CH2?: { min: number; max: number } }>(),
+};
 
-  const devices = devicesRaw.sort((a, b) => {
-    const orderA = (a.displayOrder && a.displayOrder > 0) ? a.displayOrder : 9999;
-    const orderB = (b.displayOrder && b.displayOrder > 0) ? b.displayOrder : 9999;
-    if (orderA !== orderB) {
-      return orderA - orderB;
+async function getDashboardStats(): Promise<typeof fallbackStats & { dbError?: string }> {
+  try {
+    const [
+      totalUsers,
+      adminCount,
+      managerCount,
+      employeeCount,
+      totalDevices,
+      onlineDevices,
+      totalGateways,
+      onlineGateways,
+      devicesRaw,
+    ] = await Promise.all([
+      prisma.user.count(),
+      prisma.user.count({ where: { role: Role.ADMIN } }),
+      prisma.user.count({ where: { role: Role.MANAGER } }),
+      prisma.user.count({ where: { role: Role.EMPLOYEE } }),
+      prisma.milesightDeviceCache.count(),
+      prisma.milesightDeviceCache.count({ where: { lastStatus: "ONLINE" } }),
+      prisma.milesightDeviceCache.count({ where: { deviceType: "UG65" } }),
+      prisma.milesightDeviceCache.count({ where: { deviceType: "UG65", lastStatus: "ONLINE" } }),
+      prisma.milesightDeviceCache.findMany({
+        orderBy: [
+          { displayOrder: "asc" },
+          { lastSyncAt: "desc" },
+        ],
+      }),
+    ]);
+
+    const devices = devicesRaw.sort((a, b) => {
+      const orderA = (a.displayOrder && a.displayOrder > 0) ? a.displayOrder : 9999;
+      const orderB = (b.displayOrder && b.displayOrder > 0) ? b.displayOrder : 9999;
+      if (orderA !== orderB) {
+        return orderA - orderB;
+      }
+      return a.deviceId.localeCompare(b.deviceId);
+    });
+
+    const telemetryByDevice = new Map<string, MilesightDeviceTelemetry[]>();
+    await Promise.all(
+      devices.map(async (device) => {
+        const list = await prisma.milesightDeviceTelemetry.findMany({
+          where: { deviceId: device.deviceId },
+          orderBy: { dataTimestamp: "desc" },
+          take: 200,
+        });
+        telemetryByDevice.set(device.deviceId, list);
+      })
+    );
+
+    const latestByDevice = new Map<string, MilesightDeviceTelemetry>();
+    telemetryByDevice.forEach((list, deviceId) => {
+      if (list.length > 0) {
+        latestByDevice.set(deviceId, list[0]);
+      }
+    });
+    const latestReadings = Array.from(latestByDevice.values());
+    const avgTemperature =
+      latestReadings.filter((t) => t.temperature !== null).length > 0
+        ? latestReadings
+            .filter((t) => t.temperature !== null)
+            .reduce((sum, t) => sum + (t.temperature || 0), 0) /
+          latestReadings.filter((t) => t.temperature !== null).length
+        : null;
+
+    const temperatureAlerts = await prisma.temperatureAlert.findMany({
+      where: {
+        deviceId: { in: devices.map(d => d.deviceId) },
+      },
+    });
+
+    const alertsByDevice = new Map<string, { CH1?: { min: number; max: number }; CH2?: { min: number; max: number } }>();
+    temperatureAlerts.forEach((alert) => {
+      if (!alertsByDevice.has(alert.deviceId)) {
+        alertsByDevice.set(alert.deviceId, {});
+      }
+      const deviceAlerts = alertsByDevice.get(alert.deviceId)!;
+      if (alert.sensorChannel === "CH1") {
+        deviceAlerts.CH1 = { min: alert.minTemperature, max: alert.maxTemperature };
+      } else if (alert.sensorChannel === "CH2") {
+        deviceAlerts.CH2 = { min: alert.minTemperature, max: alert.maxTemperature };
+      } else if (alert.sensorChannel === null) {
+        deviceAlerts.CH1 = { min: alert.minTemperature, max: alert.maxTemperature };
+      }
+    });
+
+    return {
+      totalUsers,
+      adminCount,
+      managerCount,
+      employeeCount,
+      totalDevices,
+      onlineDevices,
+      avgTemperature,
+      totalGateways,
+      onlineGateways,
+      devices,
+      telemetryByDevice,
+      alertsByDevice,
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Database unavailable";
+    const code = error && typeof error === "object" && "code" in error ? (error as { code?: string }).code : undefined;
+    const isConnectionError =
+      code === "P1001" ||
+      (typeof message === "string" &&
+        (message.includes("Can't reach database server") || message.includes("connect ECONNREFUSED")));
+    if (isConnectionError) {
+      console.warn("[Admin Dashboard] Database unreachable (P1001). Using fallback stats. Add ?connect_timeout=3 to DATABASE_URL to fail faster.");
+    } else {
+      console.error("[Admin Dashboard] Database error:", error);
     }
-    return a.deviceId.localeCompare(b.deviceId);
-  });
-
-  // Fetch telemetry per device (so every device gets its own recent data on the dashboard)
-  const telemetryByDevice = new Map<string, Awaited<ReturnType<typeof prisma.milesightDeviceTelemetry.findMany>>>();
-  await Promise.all(
-    devices.map(async (device) => {
-      const list = await prisma.milesightDeviceTelemetry.findMany({
-        where: { deviceId: device.deviceId },
-        orderBy: { dataTimestamp: "desc" },
-        take: 200,
-      });
-      telemetryByDevice.set(device.deviceId, list);
-    })
-  );
-
-  const latestByDevice = new Map<string, MilesightDeviceTelemetry>();
-  telemetryByDevice.forEach((list, deviceId) => {
-    if (list.length > 0) {
-      latestByDevice.set(deviceId, list[0]);
-    }
-  });
-  const latestReadings = Array.from(latestByDevice.values());
-  const avgTemperature =
-    latestReadings.filter((t) => t.temperature !== null).length > 0
-      ? latestReadings
-          .filter((t) => t.temperature !== null)
-          .reduce((sum, t) => sum + (t.temperature || 0), 0) /
-        latestReadings.filter((t) => t.temperature !== null).length
-      : null;
-
-  // Fetch temperature alerts for all devices
-  const temperatureAlerts = await prisma.temperatureAlert.findMany({
-    where: {
-      deviceId: { in: devices.map(d => d.deviceId) },
-    },
-  });
-
-  // Create a map of deviceId -> alerts (by channel)
-  const alertsByDevice = new Map<string, { CH1?: { min: number; max: number }; CH2?: { min: number; max: number } }>();
-  temperatureAlerts.forEach((alert) => {
-    if (!alertsByDevice.has(alert.deviceId)) {
-      alertsByDevice.set(alert.deviceId, {});
-    }
-    const deviceAlerts = alertsByDevice.get(alert.deviceId)!;
-    if (alert.sensorChannel === "CH1") {
-      deviceAlerts.CH1 = { min: alert.minTemperature, max: alert.maxTemperature };
-    } else if (alert.sensorChannel === "CH2") {
-      deviceAlerts.CH2 = { min: alert.minTemperature, max: alert.maxTemperature };
-    } else if (alert.sensorChannel === null) {
-      // Single sensor device - apply to CH1
-      deviceAlerts.CH1 = { min: alert.minTemperature, max: alert.maxTemperature };
-    }
-  });
-
-  return {
-    totalUsers,
-    adminCount,
-    managerCount,
-    employeeCount,
-    totalDevices,
-    onlineDevices,
-    avgTemperature,
-    totalGateways,
-    onlineGateways,
-    devices,
-    telemetryByDevice,
-    alertsByDevice,
-  };
+    return {
+      ...fallbackStats,
+      dbError: isConnectionError
+        ? "Database server is unreachable. Check that it is running and that DATABASE_URL is correct (host, port, network/VPN)."
+        : message,
+    };
+  }
 }
 
 export default async function AdminDashboard() {
@@ -125,6 +157,12 @@ export default async function AdminDashboard() {
     <DashboardLayout requiredRole={Role.ADMIN}>
       <AutoRefresh intervalMinutes={5} />
       <div className="flex flex-1 flex-col gap-4 p-4 md:gap-6 md:p-6">
+        {stats.dbError && (
+          <Alert variant="destructive">
+            <AlertTitle>Database unavailable</AlertTitle>
+            <AlertDescription>{stats.dbError}</AlertDescription>
+          </Alert>
+        )}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold tracking-tight">Admin Dashboard</h1>

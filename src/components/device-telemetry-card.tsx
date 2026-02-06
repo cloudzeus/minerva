@@ -883,7 +883,7 @@ export function DeviceTelemetryCard({
                     />
                   )}
                   {hasTemperature && (
-                    <Bar dataKey="temperature" fill="var(--color-temperature)" radius={4} maxBarSize={30} baseValue={0}>
+                    <Bar dataKey="temperature" fill="var(--color-temperature)" radius={4} maxBarSize={30}>
                       {chartDataForBars.map((entry: any, index: number) => {
                         const value = entry.temperature;
                         const fillColor = "var(--color-temperature)";
@@ -892,7 +892,7 @@ export function DeviceTelemetryCard({
                     </Bar>
                   )}
                   {hasTemperatureLeft && (
-                    <Bar dataKey="temperature_left" fill="var(--color-temperature_left)" radius={4} maxBarSize={30} baseValue={0}>
+                    <Bar dataKey="temperature_left" fill="var(--color-temperature_left)" radius={4} maxBarSize={30}>
                       {chartDataForBars.map((_: any, index: number) => {
                         const value = chartData[index]?.temperature_left;
                         let fillColor = "var(--color-temperature_left)";
@@ -905,7 +905,7 @@ export function DeviceTelemetryCard({
                     </Bar>
                   )}
                   {hasTemperatureRight && (
-                    <Bar dataKey="temperature_right" fill="var(--color-temperature_right)" radius={4} maxBarSize={30} baseValue={0}>
+                    <Bar dataKey="temperature_right" fill="var(--color-temperature_right)" radius={4} maxBarSize={30}>
                       {chartDataForBars.map((_: any, index: number) => {
                         const value = chartData[index]?.temperature_right;
                         let fillColor = "var(--color-temperature_right)";

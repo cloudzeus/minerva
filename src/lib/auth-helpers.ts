@@ -4,11 +4,28 @@ import { Role } from "@prisma/client";
 
 /**
  * Get the current authenticated user session
- * Returns null if not authenticated
+ * Returns null if not authenticated or if session JWT is invalid (e.g. AUTH_SECRET rotated).
  */
 export async function getCurrentUser() {
-  const session = await auth();
-  return session?.user ?? null;
+  try {
+    const session = await auth();
+    return session?.user ?? null;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const causeMessage =
+      error && typeof error === "object" && "cause" in error && error.cause instanceof Error
+        ? error.cause.message
+        : "";
+    const isInvalidSession =
+      message.includes("no matching decryption secret") ||
+      message.includes("JWTSessionError") ||
+      causeMessage.includes("no matching decryption secret") ||
+      (error && typeof error === "object" && "type" in error && (error as { type?: string }).type === "JWTSessionError");
+    if (isInvalidSession) {
+      return null;
+    }
+    throw error;
+  }
 }
 
 /**
