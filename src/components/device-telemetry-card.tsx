@@ -444,6 +444,62 @@ export function DeviceTelemetryCard({
     };
   }, [minTemperatureCH1, maxTemperatureCH1, minTemperatureCH2, maxTemperatureCH2]);
 
+  // Dynamic Y-axis domain from data: small ranges get proportional padding so bars are visible (e.g. -0.1 to -0.032 → axis like -0.2 to 0.1)
+  const temperatureDomain = React.useMemo(() => {
+    const values: number[] = [];
+    chartData.forEach((entry: Record<string, unknown>) => {
+      for (const key of ["temperature", "temperature_left", "temperature_right"]) {
+        const v = entry[key];
+        if (typeof v === "number" && !isNaN(v)) values.push(v);
+      }
+    });
+    const alertMins = [minTemperatureCH1, minTemperatureCH2].filter((n): n is number => n != null);
+    const alertMaxs = [maxTemperatureCH1, maxTemperatureCH2].filter((n): n is number => n != null);
+    const all = [...values, ...alertMins, ...alertMaxs];
+    if (all.length === 0) return [-5, 35] as [number, number];
+    const dataMin = Math.min(...all);
+    const dataMax = Math.max(...all);
+    const range = dataMax - dataMin;
+    // Proportional padding: small range (e.g. -0.1 to -0.032) → small padding so bars fill the chart
+    const minPadding = 0.02;
+    const padding = range === 0 ? 0.5 : Math.max(minPadding, range * 0.2);
+    let minDomain = dataMin - padding;
+    let maxDomain = dataMax + padding;
+    // Enforce minimum axis span so scale is readable (e.g. at least 0.5°C)
+    const minSpan = 0.5;
+    if (maxDomain - minDomain < minSpan) {
+      const center = (minDomain + maxDomain) / 2;
+      minDomain = center - minSpan / 2;
+      maxDomain = center + minSpan / 2;
+    }
+    return [minDomain, maxDomain] as [number, number];
+  }, [chartData, minTemperatureCH1, maxTemperatureCH1, minTemperatureCH2, maxTemperatureCH2]);
+
+  // Bar chart: plot values relative to domain min so ALL bars start at bottom (0) and go up
+  const chartDataForBars = React.useMemo(() => {
+    const domainMin = temperatureDomain[0];
+    const domainMax = temperatureDomain[1];
+    return chartData.map((entry: Record<string, unknown>) => {
+      const out = { ...entry, date: entry.date } as Record<string, unknown>;
+      for (const key of ["temperature", "temperature_left", "temperature_right"]) {
+        const v = entry[key];
+        if (v === null || v === undefined || (typeof v === "number" && isNaN(v))) {
+          out[key] = 0; // no data → zero height bar at bottom
+        } else {
+          out[key] = typeof v === "number" ? v - domainMin : 0; // plot from 0 (bottom) upward
+        }
+      }
+      return out;
+    });
+  }, [chartData, temperatureDomain]);
+
+  // Y-axis range for plotted values: always [0, span] so bars go from bottom up
+  const barChartYDomain = React.useMemo(() => {
+    const domainMin = temperatureDomain[0];
+    const domainMax = temperatureDomain[1];
+    return [0, domainMax - domainMin] as [number, number];
+  }, [temperatureDomain]);
+
   // Chart configuration for shadcn with min/max in labels
   const chartConfig = {
     temperature: {
@@ -494,15 +550,17 @@ export function DeviceTelemetryCard({
   return (
     <Card className="border-border/40 shadow-sm" style={{ backgroundColor: '#e0e1e2' }}>
       <CardHeader className="space-y-3 border-b py-4">
-        {/* Device Name Row */}
-        <div className="flex items-center gap-2">
-          <CardTitle className="flex items-center gap-2 text-sm">
-            <FaMicrochip className="h-3.5 w-3.5 text-muted-foreground" />
-            {deviceName || `Device ${deviceId}`}
+        {/* Device Name Row - truncate long names so all cards look the same */}
+        <div className="flex min-w-0 items-center gap-2">
+          <CardTitle className="flex min-w-0 shrink items-center gap-2 text-sm">
+            <FaMicrochip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            <span className="truncate" title={deviceName || `Device ${deviceId}`}>
+              {deviceName || `Device ${deviceId}`}
+            </span>
           </CardTitle>
           <Badge
             variant={deviceStatus === "ONLINE" ? "default" : "secondary"}
-            className="h-5 text-[8px]"
+            className="h-5 shrink-0 text-[8px]"
           >
             <FaCircle
               className={`mr-1 h-2 w-2 ${
@@ -653,8 +711,8 @@ export function DeviceTelemetryCard({
 
             {/* Temperature Bar Chart - Multiple */}
             {chartData.length > 0 && (hasTemperatureLeft || hasTemperatureRight || hasTemperature) ? (
-              <ChartContainer config={chartConfig}>
-                <BarChart accessibilityLayer data={chartData}>
+              <ChartContainer config={chartConfig} className="h-[280px] w-full">
+                <BarChart accessibilityLayer data={chartDataForBars} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
                   <CartesianGrid vertical={false} />
                   <XAxis
                     dataKey="timestamp"
@@ -696,6 +754,8 @@ export function DeviceTelemetryCard({
                     }}
                   />
                   <YAxis
+                    domain={barChartYDomain}
+                    allowDataOverflow={true}
                     tickLine={false}
                     axisLine={false}
                     tickMargin={8}
@@ -707,16 +767,16 @@ export function DeviceTelemetryCard({
                     }}
                     tick={(props: any) => {
                       const { x, y, payload } = props;
-                      const value = payload.value;
-                      
-                      // Check if this tick value matches any threshold min/max (with tolerance)
+                      const plotted = payload?.value;
+                      const domainMin = temperatureDomain[0];
+                      const actualTemp = typeof plotted === "number" && !isNaN(plotted) ? plotted + domainMin : null;
                       const tolerance = 0.2;
-                      const isThreshold = 
-                        (hasTemperatureLeft && temperatureStats.left.min !== null && Math.abs(value - temperatureStats.left.min) < tolerance) ||
-                        (hasTemperatureLeft && temperatureStats.left.max !== null && Math.abs(value - temperatureStats.left.max) < tolerance) ||
-                        (hasTemperatureRight && temperatureStats.right.min !== null && Math.abs(value - temperatureStats.right.min) < tolerance) ||
-                        (hasTemperatureRight && temperatureStats.right.max !== null && Math.abs(value - temperatureStats.right.max) < tolerance);
-                      
+                      const isThreshold = actualTemp !== null && (
+                        (hasTemperatureLeft && temperatureStats.left.min !== null && Math.abs(actualTemp - temperatureStats.left.min) < tolerance) ||
+                        (hasTemperatureLeft && temperatureStats.left.max !== null && Math.abs(actualTemp - temperatureStats.left.max) < tolerance) ||
+                        (hasTemperatureRight && temperatureStats.right.min !== null && Math.abs(actualTemp - temperatureStats.right.min) < tolerance) ||
+                        (hasTemperatureRight && temperatureStats.right.max !== null && Math.abs(actualTemp - temperatureStats.right.max) < tolerance)
+                      );
                       return (
                         <g transform={`translate(${x},${y})`}>
                           <text
@@ -728,7 +788,7 @@ export function DeviceTelemetryCard({
                             fontSize={isThreshold ? "15px" : "14px"}
                             fontWeight="bold"
                           >
-                            {value.toFixed(1)}
+                            {actualTemp !== null ? actualTemp.toFixed(1) : ""}
                           </text>
                         </g>
                       );
@@ -744,6 +804,17 @@ export function DeviceTelemetryCard({
                           if (!dataPoint || !dataPoint.date) return "";
                           return format(dataPoint.date, "MMM dd, yyyy HH:mm");
                         }}
+                        formatter={(value, name) => {
+                          const actual = typeof value === "number" && !isNaN(value) ? value + temperatureDomain[0] : null;
+                          return (
+                            <div className="flex flex-1 justify-between gap-2 leading-none items-center">
+                              <span className="text-muted-foreground">{name}</span>
+                              <span className="font-mono font-medium tabular-nums text-foreground">
+                                {actual !== null ? `${actual.toFixed(1)}°C` : "—"}
+                              </span>
+                            </div>
+                          );
+                        }}
                       />
                     }
                   />
@@ -751,7 +822,7 @@ export function DeviceTelemetryCard({
                   {/* Show CH1 reference lines if we have alert settings, even if no data yet */}
                   {temperatureStats.left.min !== null && (
                     <ReferenceLine
-                      y={temperatureStats.left.min}
+                      y={temperatureStats.left.min - temperatureDomain[0]}
                       stroke="#fb923c"
                       strokeWidth={2}
                       strokeDasharray="5 5"
@@ -762,12 +833,11 @@ export function DeviceTelemetryCard({
                         fontSize: 11,
                         fontWeight: "bold",
                       }}
-                      ifOverflow="extendDomain"
                     />
                   )}
                   {temperatureStats.left.max !== null && (
                     <ReferenceLine
-                      y={temperatureStats.left.max}
+                      y={temperatureStats.left.max - temperatureDomain[0]}
                       stroke="#fb923c"
                       strokeWidth={2}
                       strokeDasharray="5 5"
@@ -778,14 +848,13 @@ export function DeviceTelemetryCard({
                         fontSize: 11,
                         fontWeight: "bold",
                       }}
-                      ifOverflow="extendDomain"
                     />
                   )}
                   {/* Temperature Alert Reference Lines for CH2 (temperature_right) - Green color */}
                   {/* Show CH2 reference lines if we have alert settings, even if no data yet */}
                   {temperatureStats.right.min !== null && (
                     <ReferenceLine
-                      y={temperatureStats.right.min}
+                      y={temperatureStats.right.min - temperatureDomain[0]}
                       stroke="#16a34a"
                       strokeWidth={2}
                       strokeDasharray="5 5"
@@ -796,12 +865,11 @@ export function DeviceTelemetryCard({
                         fontSize: 11,
                         fontWeight: "bold",
                       }}
-                      ifOverflow="extendDomain"
                     />
                   )}
                   {temperatureStats.right.max !== null && (
                     <ReferenceLine
-                      y={temperatureStats.right.max}
+                      y={temperatureStats.right.max - temperatureDomain[0]}
                       stroke="#16a34a"
                       strokeWidth={2}
                       strokeDasharray="5 5"
@@ -812,12 +880,11 @@ export function DeviceTelemetryCard({
                         fontSize: 11,
                         fontWeight: "bold",
                       }}
-                      ifOverflow="extendDomain"
                     />
                   )}
                   {hasTemperature && (
-                    <Bar dataKey="temperature" fill="var(--color-temperature)" radius={4} maxBarSize={30}>
-                      {chartData.map((entry: any, index: number) => {
+                    <Bar dataKey="temperature" fill="var(--color-temperature)" radius={4} maxBarSize={30} baseValue={0}>
+                      {chartDataForBars.map((entry: any, index: number) => {
                         const value = entry.temperature;
                         const fillColor = "var(--color-temperature)";
                         return <Cell key={`cell-temp-${index}`} fill={fillColor} />;
@@ -825,39 +892,27 @@ export function DeviceTelemetryCard({
                     </Bar>
                   )}
                   {hasTemperatureLeft && (
-                    <Bar dataKey="temperature_left" fill="var(--color-temperature_left)" radius={4} maxBarSize={30}>
-                      {chartData.map((entry: any, index: number) => {
-                        const value = entry.temperature_left;
+                    <Bar dataKey="temperature_left" fill="var(--color-temperature_left)" radius={4} maxBarSize={30} baseValue={0}>
+                      {chartDataForBars.map((_: any, index: number) => {
+                        const value = chartData[index]?.temperature_left;
                         let fillColor = "var(--color-temperature_left)";
-                        
                         if (value !== null && value !== undefined) {
-                          // Check if value exceeds threshold range
-                          if (minTemperatureCH1 !== null && minTemperatureCH1 !== undefined && value < minTemperatureCH1) {
-                            fillColor = "#E60000"; // Vodafone red for below min
-                          } else if (maxTemperatureCH1 !== null && maxTemperatureCH1 !== undefined && value > maxTemperatureCH1) {
-                            fillColor = "#E60000"; // Vodafone red for above max
-                          }
+                          if (minTemperatureCH1 != null && value < minTemperatureCH1) fillColor = "#E60000";
+                          else if (maxTemperatureCH1 != null && value > maxTemperatureCH1) fillColor = "#E60000";
                         }
-                        
                         return <Cell key={`cell-left-${index}`} fill={fillColor} />;
                       })}
                     </Bar>
                   )}
                   {hasTemperatureRight && (
-                    <Bar dataKey="temperature_right" fill="var(--color-temperature_right)" radius={4} maxBarSize={30}>
-                      {chartData.map((entry: any, index: number) => {
-                        const value = entry.temperature_right;
-                        let fillColor = "var(--color-temperature_right)"; // Intense green by default
-                        
+                    <Bar dataKey="temperature_right" fill="var(--color-temperature_right)" radius={4} maxBarSize={30} baseValue={0}>
+                      {chartDataForBars.map((_: any, index: number) => {
+                        const value = chartData[index]?.temperature_right;
+                        let fillColor = "var(--color-temperature_right)";
                         if (value !== null && value !== undefined) {
-                          // Check if value exceeds threshold range
-                          if (minTemperatureCH2 !== null && minTemperatureCH2 !== undefined && value < minTemperatureCH2) {
-                            fillColor = "#E60000"; // Vodafone red for below min
-                          } else if (maxTemperatureCH2 !== null && maxTemperatureCH2 !== undefined && value > maxTemperatureCH2) {
-                            fillColor = "#E60000"; // Vodafone red for above max
-                          }
+                          if (minTemperatureCH2 != null && value < minTemperatureCH2) fillColor = "#E60000";
+                          else if (maxTemperatureCH2 != null && value > maxTemperatureCH2) fillColor = "#E60000";
                         }
-                        
                         return <Cell key={`cell-right-${index}`} fill={fillColor} />;
                       })}
                     </Bar>
