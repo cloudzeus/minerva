@@ -1,6 +1,47 @@
 /**
- * Email notification service for temperature alerts using SMTP2GO API
+ * Email notification service for alerts via Office 365 SMTP (noreply@aic.gr)
  */
+
+import nodemailer from "nodemailer";
+
+const FROM_EMAIL = "noreply@aic.gr";
+const FROM_NAME = "AIC IOT ALERTS";
+
+function getSmtpConfig() {
+  const host = process.env.SMTP_SERVER;
+  const port = Number(process.env.SMTP_PORT) || 587;
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASSWORD;
+  if (!host || !user || !pass) return null;
+  return { host, port, user, pass };
+}
+
+async function sendViaSmtp(options: {
+  to: string[];
+  subject: string;
+  html: string;
+  text?: string;
+}): Promise<{ success: true; emailsSent: number } | { success: false; error: string }> {
+  const config = getSmtpConfig();
+  if (!config) {
+    console.error("[Email Service] ❌ SMTP not configured (set SMTP_SERVER, SMTP_USER, SMTP_PASSWORD in .env)");
+    return { success: false, error: "Email service not configured (missing SMTP settings)" };
+  }
+  const transporter = nodemailer.createTransport({
+    host: config.host,
+    port: config.port,
+    secure: config.port === 465,
+    auth: { user: config.user, pass: config.pass },
+  });
+  await transporter.sendMail({
+    from: `"${FROM_NAME}" <${FROM_EMAIL}>`,
+    to: options.to.join(", "),
+    subject: options.subject,
+    html: options.html,
+    text: options.text,
+  });
+  return { success: true, emailsSent: options.to.length };
+}
 
 export interface TemperatureAlertEmail {
   deviceId: string;
@@ -14,86 +55,37 @@ export interface TemperatureAlertEmail {
 }
 
 /**
- * Send temperature alert email via SMTP2GO
+ * Send temperature alert email via SMTP (noreply@aic.gr)
  */
 export async function sendTemperatureAlertEmail(alert: TemperatureAlertEmail) {
   try {
-    const smtp2goApiKey = process.env.SMTP_2_GO_KEY;
-    const fromEmail = process.env.SMTP_2_GO_FROM_EMAIL || "iot@aic.gr";
-    const fromName = process.env.SMTP_2_GO_FROM_NAME || "AIC IOT ALERTS";
-
-    if (!smtp2goApiKey) {
-      console.error("[Email Service] ❌ SMTP_2_GO_KEY not configured in environment variables");
-      console.error("[Email Service] Please set SMTP_2_GO_KEY in your .env file");
-      return {
-        success: false,
-        error: "Email service not configured (missing SMTP_2_GO_KEY)",
-      };
-    }
-
     if (!alert.recipients || alert.recipients.length === 0) {
       console.error("[Email Service] ❌ No email recipients provided");
-      return {
-        success: false,
-        error: "No email recipients provided",
-      };
+      return { success: false, error: "No email recipients provided" };
     }
-
-    console.log("[Email Service] Sending temperature alert via SMTP2GO:", {
+    console.log("[Email Service] Sending temperature alert via SMTP:", {
       deviceName: alert.deviceName,
       currentTemp: alert.currentTemperature,
       alertType: alert.alertType,
       recipients: alert.recipients,
     });
-
     const subject = `🚨 Temperature Alert: ${alert.deviceName}`;
     const htmlContent = generateEmailBody(alert);
-
-    // SMTP2GO API endpoint
-    const response = await fetch("https://api.smtp2go.com/v3/email/send", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Smtp2go-Api-Key": smtp2goApiKey,
-      },
-      body: JSON.stringify({
-        api_key: smtp2goApiKey,
-        to: alert.recipients,
-        sender: fromEmail,
-        subject: subject,
-        html_body: htmlContent,
-        text_body: `Temperature Alert: ${alert.deviceName}\n\nCurrent Temperature: ${alert.currentTemperature.toFixed(1)}°C\nThreshold Range: ${alert.minThreshold.toFixed(1)}°C - ${alert.maxThreshold.toFixed(1)}°C\nAlert Type: ${alert.alertType === "MIN" ? "Temperature Too Low" : "Temperature Too High"}`,
-      }),
+    const textBody = `Temperature Alert: ${alert.deviceName}\n\nCurrent Temperature: ${alert.currentTemperature.toFixed(1)}°C\nThreshold Range: ${alert.minThreshold.toFixed(1)}°C - ${alert.maxThreshold.toFixed(1)}°C\nAlert Type: ${alert.alertType === "MIN" ? "Temperature Too Low" : "Temperature Too High"}`;
+    const result = await sendViaSmtp({
+      to: alert.recipients,
+      subject,
+      html: htmlContent,
+      text: textBody,
     });
-
-    const result = await response.json();
-
-    if (!response.ok || result.data?.error) {
-      throw new Error(result.data?.error || `SMTP2GO API error: ${response.statusText}`);
+    if (result.success) {
+      console.log("[Email Service] ✅ Temperature alert sent via SMTP:", { recipients: alert.recipients.length });
     }
-
-    console.log("[Email Service] ✅ Email sent successfully via SMTP2GO:", {
-      emailId: result.data?.email_id,
-      recipients: alert.recipients.length,
-      recipientEmails: alert.recipients,
-    });
-
-    return {
-      success: true,
-      emailsSent: alert.recipients.length,
-      emailId: result.data?.email_id,
-    };
-  } catch (error: any) {
-    console.error("[Email Service] ❌ Failed to send alert via SMTP2GO:", error);
-    console.error("[Email Service] Error details:", {
-      message: error.message,
-      stack: error.stack,
-    });
-    return {
-      success: false,
-      error: error.message || "Failed to send email",
-      details: error.stack,
-    };
+    return result.success ? { success: true, emailsSent: result.emailsSent } : result;
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to send email";
+    console.error("[Email Service] ❌ Failed to send temperature alert:", error);
+    return { success: false, error: message };
   }
 }
 
@@ -305,51 +297,24 @@ export async function sendTemperatureAlertRecipientDisabledEmail(
   notification: TemperatureAlertRecipientDisabledEmail
 ) {
   try {
-    const smtp2goApiKey = process.env.SMTP_2_GO_KEY;
-    const fromEmail = process.env.SMTP_2_GO_FROM_EMAIL || "iot@aic.gr";
-
-    if (!smtp2goApiKey) {
-      console.error("[Email Service] ❌ SMTP_2_GO_KEY not configured");
-      return {
-        success: false,
-        error: "Email service not configured (missing SMTP_2_GO_KEY)",
-      };
-    }
-
     const channelLabel = notification.channelLabel ? ` ${notification.channelLabel}` : "";
     const subject = `Temperature alerts disabled – ${notification.deviceName}${channelLabel}`;
     const htmlContent = generateRecipientDisabledEmailBody(notification);
-
-    const response = await fetch("https://api.smtp2go.com/v3/email/send", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Smtp2go-Api-Key": smtp2goApiKey,
-      },
-      body: JSON.stringify({
-        api_key: smtp2goApiKey,
-        to: [notification.recipientEmail],
-        sender: fromEmail,
-        subject,
-        html_body: htmlContent,
-        text_body: `You have been disabled from receiving temperature alert notifications for device "${notification.deviceName}"${channelLabel}. You will no longer receive emails when temperature goes out of range.`,
-      }),
+    const textBody = `You have been disabled from receiving temperature alert notifications for device "${notification.deviceName}"${channelLabel}. You will no longer receive emails when temperature goes out of range.`;
+    const result = await sendViaSmtp({
+      to: [notification.recipientEmail],
+      subject,
+      html: htmlContent,
+      text: textBody,
     });
-
-    const result = await response.json();
-
-    if (!response.ok || result.data?.error) {
-      throw new Error(result.data?.error || `SMTP2GO API error: ${response.statusText}`);
+    if (result.success) {
+      console.log("[Email Service] ✅ Recipient disabled notification sent to", notification.recipientEmail);
     }
-
-    console.log("[Email Service] ✅ Recipient disabled notification sent to", notification.recipientEmail);
-    return { success: true, emailsSent: 1 };
-  } catch (error: any) {
+    return result;
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to send email";
     console.error("[Email Service] ❌ Failed to send recipient disabled notification:", error);
-    return {
-      success: false,
-      error: error.message || "Failed to send email",
-    };
+    return { success: false, error: message };
   }
 }
 
@@ -421,18 +386,6 @@ export async function sendDeviceOfflineAlertEmail(
   alert: DeviceOfflineAlertEmail
 ) {
   try {
-    const smtp2goApiKey = process.env.SMTP_2_GO_KEY;
-    const fromEmail = process.env.SMTP_2_GO_FROM_EMAIL || "iot@aic.gr";
-    const fromName = process.env.SMTP_2_GO_FROM_NAME || "AIC IOT ALERTS";
-
-    if (!smtp2goApiKey) {
-      console.error("[Email Service] ❌ SMTP_2_GO_KEY not configured");
-      return {
-        success: false,
-        error: "Email service not configured (missing SMTP_2_GO_KEY)",
-      };
-    }
-
     const subject = `⚠️ No Telemetry from ${alert.deviceName}`;
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; line-height: 1.6;">
@@ -462,36 +415,13 @@ export async function sendDeviceOfflineAlertEmail(
         </p>
       </div>
     `;
-
-    const response = await fetch("https://api.smtp2go.com/v3/email/send", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Smtp2go-Api-Key": smtp2goApiKey,
-      },
-      body: JSON.stringify({
-        api_key: smtp2goApiKey,
-        to: alert.recipients,
-        sender: fromEmail,
-        subject: subject,
-        html_body: htmlContent,
-      }),
-    });
-
-    const result = await response.json();
-
-    if (!response.ok || result.data?.error) {
-      throw new Error(result.data?.error || `SMTP2GO API error: ${response.statusText}`);
-    }
-
-    console.log("[Email Service] ✅ Offline alert sent via SMTP2GO");
-    return { success: true };
-  } catch (error: any) {
+    const result = await sendViaSmtp({ to: alert.recipients, subject, html: htmlContent });
+    if (result.success) console.log("[Email Service] ✅ Offline alert sent via SMTP");
+    return result.success ? { success: true } : result;
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to send email";
     console.error("[Email Service] ❌ Failed to send offline alert:", error);
-    return {
-      success: false,
-      error: error.message || "Failed to send email",
-    };
+    return { success: false, error: message };
   }
 }
 
@@ -504,18 +434,6 @@ interface DeviceRecoveryAlertEmail {
 
 export async function sendDeviceRecoveryEmail(alert: DeviceRecoveryAlertEmail) {
   try {
-    const smtp2goApiKey = process.env.SMTP_2_GO_KEY;
-    const fromEmail = process.env.SMTP_2_GO_FROM_EMAIL || "iot@aic.gr";
-    const fromName = process.env.SMTP_2_GO_FROM_NAME || "AIC IOT ALERTS";
-
-    if (!smtp2goApiKey) {
-      console.error("[Email Service] ❌ SMTP_2_GO_KEY not configured");
-      return {
-        success: false,
-        error: "Email service not configured (missing SMTP_2_GO_KEY)",
-      };
-    }
-
     const subject = `✅ Telemetry Resumed: ${alert.deviceName}`;
     const htmlContent = `
       <div style="font-family: Arial, sans-serif; line-height: 1.6;">
@@ -544,36 +462,13 @@ export async function sendDeviceRecoveryEmail(alert: DeviceRecoveryAlertEmail) {
         </p>
       </div>
     `;
-
-    const response = await fetch("https://api.smtp2go.com/v3/email/send", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Smtp2go-Api-Key": smtp2goApiKey,
-      },
-      body: JSON.stringify({
-        api_key: smtp2goApiKey,
-        to: alert.recipients,
-        sender: fromEmail,
-        subject: subject,
-        html_body: htmlContent,
-      }),
-    });
-
-    const result = await response.json();
-
-    if (!response.ok || result.data?.error) {
-      throw new Error(result.data?.error || `SMTP2GO API error: ${response.statusText}`);
-    }
-
-    console.log("[Email Service] ✅ Recovery alert sent via SMTP2GO");
-    return { success: true };
-  } catch (error: any) {
+    const result = await sendViaSmtp({ to: alert.recipients, subject, html: htmlContent });
+    if (result.success) console.log("[Email Service] ✅ Recovery alert sent via SMTP");
+    return result.success ? { success: true } : result;
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to send email";
     console.error("[Email Service] ❌ Failed to send recovery alert:", error);
-    return {
-      success: false,
-      error: error.message || "Failed to send email",
-    };
+    return { success: false, error: message };
   }
 }
 
@@ -591,65 +486,31 @@ export interface OfflineDeviceNotificationEmail {
 }
 
 /**
- * Send offline device notification email via SMTP2GO
+ * Send offline device notification email via SMTP (noreply@aic.gr)
  */
 export async function sendOfflineDeviceNotificationEmail(
   notification: OfflineDeviceNotificationEmail
 ) {
   try {
-    const smtp2goApiKey = process.env.SMTP_2_GO_KEY;
-    const fromEmail = process.env.SMTP_2_GO_FROM_EMAIL || "iot@aic.gr";
-    const fromName = process.env.SMTP_2_GO_FROM_NAME || "AIC IOT ALERTS";
-
-    if (!smtp2goApiKey) {
-      console.error("[Email Service] ❌ SMTP_2_GO_KEY not configured");
-      return {
-        success: false,
-        error: "Email service not configured (missing SMTP_2_GO_KEY)",
-      };
-    }
-
-    console.log("[Email Service] Sending offline device notification via SMTP2GO:", {
+    console.log("[Email Service] Sending offline device notification via SMTP:", {
       deviceCount: notification.devices.length,
       recipient: notification.recipientEmail,
     });
-
     const subject = `⚠️ ${notification.devices.length} Device(s) Offline - MINERVA`;
     const htmlContent = generateOfflineDeviceEmailBody(notification);
-
-    const response = await fetch("https://api.smtp2go.com/v3/email/send", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Smtp2go-Api-Key": smtp2goApiKey,
-      },
-      body: JSON.stringify({
-        api_key: smtp2goApiKey,
-        to: [notification.recipientEmail],
-        sender: fromEmail,
-        subject: subject,
-        html_body: htmlContent,
-      }),
+    const result = await sendViaSmtp({
+      to: [notification.recipientEmail],
+      subject,
+      html: htmlContent,
     });
-
-    const result = await response.json();
-
-    if (!response.ok || result.data?.error) {
-      throw new Error(result.data?.error || `SMTP2GO API error: ${response.statusText}`);
+    if (result.success) {
+      console.log("[Email Service] ✅ Offline device notification sent via SMTP");
     }
-
-    console.log("[Email Service] ✅ Offline device notification sent successfully via SMTP2GO");
-
-    return {
-      success: true,
-      emailsSent: 1,
-    };
-  } catch (error: any) {
-    console.error("[Email Service] ❌ Failed to send offline device notification via SMTP2GO:", error);
-    return {
-      success: false,
-      error: error.message || "Failed to send email",
-    };
+    return result.success ? { success: true, emailsSent: 1 } : result;
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : "Failed to send email";
+    console.error("[Email Service] ❌ Failed to send offline device notification:", error);
+    return { success: false, error: message };
   }
 }
 
