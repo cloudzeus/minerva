@@ -1,11 +1,18 @@
 /**
  * Email notification service for alerts via Office 365 SMTP (noreply@aic.gr)
+ *
+ * Office 365 535 "Authentication unsuccessful" with an App Password usually means:
+ * - SMTP AUTH is disabled for the mailbox. Admin must enable it:
+ *   Microsoft 365 admin → Users → noreply@aic.gr → Mail → Manage email apps
+ *   → turn ON "Authenticated SMTP". Or via Exchange admin center:
+ *   Recipients → Mailboxes → noreply@aic.gr → Mailbox features → SMTP AUTH: Enabled.
+ * - Security defaults may block legacy auth; tenant may need "SMTP AUTH" enabled.
  */
 
 import nodemailer from "nodemailer";
 
 const FROM_EMAIL = "noreply@aic.gr";
-const FROM_NAME = "AIC IOT ALERTS";
+const FROM_NAME = "AIC No-Reply";
 
 function getSmtpConfig() {
   const host = process.env.SMTP_SERVER;
@@ -30,8 +37,12 @@ async function sendViaSmtp(options: {
   const transporter = nodemailer.createTransport({
     host: config.host,
     port: config.port,
-    secure: config.port === 465,
+    secure: false, // TLS on 587
     auth: { user: config.user, pass: config.pass },
+    tls: {
+      ciphers: "SSLv3",
+      rejectUnauthorized: false,
+    },
   });
   await transporter.sendMail({
     from: `"${FROM_NAME}" <${FROM_EMAIL}>`,
