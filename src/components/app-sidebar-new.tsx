@@ -23,6 +23,7 @@ import {
   FaMicrochip,
   FaDatabase,
   FaList,
+  FaEnvelope,
 } from "react-icons/fa";
 import { Button } from "@/components/ui/button";
 
@@ -137,6 +138,12 @@ export function AppSidebarNew({ role, currentPath }: AppSidebarProps) {
               label: "Milesight Webhook",
               icon: FaWifi,
               iconColor: "text-teal-500",
+            },
+            {
+              href: "/admin/settings/email-test",
+              label: "Email Test",
+              icon: FaEnvelope,
+              iconColor: "text-blue-500",
             },
             {
               href: "/admin/devices/milesight",

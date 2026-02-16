@@ -784,9 +784,18 @@ export async function checkAndNotifyOfflineDevices() {
       return { success: true, count: 0, message: "No offline devices found" };
     }
 
-    // Import email function
     const { sendOfflineDeviceNotificationEmail } = await import("@/lib/email");
-    
+    const { getAlertRecipientEmails } = await import("@/lib/alert-recipients");
+
+    const recipients = await getAlertRecipientEmails();
+    if (recipients.length === 0) {
+      return {
+        success: true,
+        count: offlineDevices.length,
+        message: "No alert recipients (no active ADMIN users). Add users in Settings.",
+      };
+    }
+
     const result = await sendOfflineDeviceNotificationEmail({
       devices: offlineDevices.map((d) => ({
         deviceId: d.deviceId,
@@ -795,14 +804,14 @@ export async function checkAndNotifyOfflineDevices() {
         deviceType: d.deviceType || "Unknown",
         lastSyncAt: d.lastSyncAt,
       })),
-      recipientEmail: "gkozyris@aic.gr",
+      recipients,
     });
 
     return {
       success: result.success,
       count: offlineDevices.length,
       message: result.success
-        ? `Notification sent for ${offlineDevices.length} offline device(s)`
+        ? `Notification sent for ${offlineDevices.length} offline device(s) to ${recipients.length} recipient(s)`
         : result.error || "Failed to send notification",
     };
   } catch (error: any) {

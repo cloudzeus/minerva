@@ -54,6 +54,26 @@ async function sendViaSmtp(options: {
   return { success: true, emailsSent: options.to.length };
 }
 
+/**
+ * Send a test email to a recipient (for Settings → Email Test).
+ * Uses the same SMTP config as alert emails.
+ */
+export async function sendTestEmail(
+  recipientEmail: string
+): Promise<{ success: true } | { success: false; error: string }> {
+  const subject = "MINERVA – Test email";
+  const html =
+    "<p>This is a <strong>test email</strong> from MINERVA.</p><p>If you received this, SMTP is working correctly.</p>";
+  const text = "This is a test email from MINERVA. If you received this, SMTP is working correctly.";
+  const result = await sendViaSmtp({
+    to: [recipientEmail],
+    subject,
+    html,
+    text,
+  });
+  return result.success ? { success: true } : result;
+}
+
 export interface TemperatureAlertEmail {
   deviceId: string;
   deviceName: string;
@@ -493,31 +513,37 @@ export interface OfflineDeviceInfo {
 
 export interface OfflineDeviceNotificationEmail {
   devices: OfflineDeviceInfo[];
-  recipientEmail: string;
+  /** Recipient emails (e.g. from getAlertRecipientEmails()). Sent via same SMTP config. */
+  recipients: string[];
 }
 
 /**
- * Send offline device notification email via SMTP (noreply@aic.gr)
+ * Send offline device notification email via SMTP (noreply@aic.gr).
+ * Alerts are sent to the given recipients using the configured email (nodemailer).
  */
 export async function sendOfflineDeviceNotificationEmail(
   notification: OfflineDeviceNotificationEmail
 ) {
   try {
+    if (!notification.recipients?.length) {
+      console.warn("[Email Service] No recipients for offline device notification");
+      return { success: false, error: "No recipients configured" };
+    }
     console.log("[Email Service] Sending offline device notification via SMTP:", {
       deviceCount: notification.devices.length,
-      recipient: notification.recipientEmail,
+      recipientCount: notification.recipients.length,
     });
     const subject = `⚠️ ${notification.devices.length} Device(s) Offline - MINERVA`;
     const htmlContent = generateOfflineDeviceEmailBody(notification);
     const result = await sendViaSmtp({
-      to: [notification.recipientEmail],
+      to: notification.recipients,
       subject,
       html: htmlContent,
     });
     if (result.success) {
       console.log("[Email Service] ✅ Offline device notification sent via SMTP");
     }
-    return result.success ? { success: true, emailsSent: 1 } : result;
+    return result.success ? { success: true, emailsSent: result.emailsSent } : result;
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : "Failed to send email";
     console.error("[Email Service] ❌ Failed to send offline device notification:", error);

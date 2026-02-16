@@ -5,9 +5,9 @@ import {
   sendDeviceOfflineAlertEmail,
   sendDeviceRecoveryEmail,
 } from "@/lib/email";
+import { getAlertRecipientEmails } from "@/lib/alert-recipients";
 
 const HEARTBEAT_THRESHOLD_MINUTES = 30;
-const ALERT_RECIPIENTS = ["gkozyris@aic.gr"];
 const CONSOLE_FETCH_LIMIT = 20;
 const DEFAULT_CRITICAL_SERIALS = [
   "6723D38465150013",
@@ -200,12 +200,15 @@ export async function recordDeviceHeartbeat(
   });
 
   if (source === "webhook" && device.criticalAlertActive && device.isCritical) {
-    await sendDeviceRecoveryEmail({
-      deviceName: device.name || device.deviceId,
-      serialNumber: device.sn,
-      devEui: device.devEUI,
-      recipients: ALERT_RECIPIENTS,
-    });
+    const recipients = await getAlertRecipientEmails();
+    if (recipients.length > 0) {
+      await sendDeviceRecoveryEmail({
+        deviceName: device.name || device.deviceId,
+        serialNumber: device.sn,
+        devEui: device.devEUI,
+        recipients,
+      });
+    }
 
     console.log(
       `[DeviceMonitor] ✅ Device ${device.deviceId} recovered via webhook`
@@ -230,13 +233,16 @@ async function handleDeviceOffline(
   );
 
   if (!device.criticalAlertActive) {
-    await sendDeviceOfflineAlertEmail({
-      deviceName: device.name || device.deviceId,
-      serialNumber: device.sn,
-      devEui: device.devEUI,
-      minutesSinceLast: minutesSince,
-      recipients: ALERT_RECIPIENTS,
-    });
+    const recipients = await getAlertRecipientEmails();
+    if (recipients.length > 0) {
+      await sendDeviceOfflineAlertEmail({
+        deviceName: device.name || device.deviceId,
+        serialNumber: device.sn,
+        devEui: device.devEUI,
+        minutesSinceLast: minutesSince,
+        recipients,
+      });
+    }
 
     await prisma.milesightDeviceCache.update({
       where: { deviceId: device.deviceId },
@@ -261,12 +267,15 @@ async function handleDeviceRecovered(device: {
     },
   });
 
-  await sendDeviceRecoveryEmail({
-    deviceName: device.name || device.deviceId,
-    serialNumber: device.sn,
-    devEui: device.devEUI,
-    recipients: ALERT_RECIPIENTS,
-  });
+  const recipients = await getAlertRecipientEmails();
+  if (recipients.length > 0) {
+    await sendDeviceRecoveryEmail({
+      deviceName: device.name || device.deviceId,
+      serialNumber: device.sn,
+      devEui: device.devEUI,
+      recipients,
+    });
+  }
 
   console.log(
     `[DeviceMonitor] ✅ Device ${device.sn || device.deviceId} telemetry resumed`
